@@ -8,4 +8,3 @@ astropy
 tqdm
 matplotlib
 cupy
-multiprocessing
