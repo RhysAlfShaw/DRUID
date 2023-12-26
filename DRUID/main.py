@@ -21,6 +21,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from astropy.io import fits
 from astropy.wcs import WCS
+import astropy
 import pandas as pd
 import setproctitle
 from multiprocessing import Pool
@@ -73,8 +74,29 @@ class sf:
 
     def __init__(self, image : np.ndarray = None, image_path : str = None, mode : str = None, 
                  pb_path : str = None, cutup : bool = False, cutup_size : int = 500, output : bool = True, 
-                 area_limit : int = 5, smooth_sigma = 1, nproc : int = 1, GPU : bool = False):
-    
+                 area_limit : int = 5, smooth_sigma = 1, nproc : int = 1, GPU : bool = False, 
+                 header : astropy.io.fits.header.Header = None, Xoff : int = None, Yoff : int = None) -> None:
+        """Initialise the DRUID, here general parameters can be set..
+
+        Args:
+            image (np.ndarray, optional): _description_. Defaults to None.
+            image_path (str, optional): _description_. Defaults to None.
+            mode (str, optional): _description_. Defaults to None.
+            pb_path (str, optional): _description_. Defaults to None.
+            cutup (bool, optional): _description_. Defaults to False.
+            cutup_size (int, optional): _description_. Defaults to 500.
+            output (bool, optional): _description_. Defaults to True.
+            area_limit (int, optional): _description_. Defaults to 5.
+            smooth_sigma (int, optional): _description_. Defaults to 1.
+            nproc (int, optional): _description_. Defaults to 1.
+            GPU (bool, optional): _description_. Defaults to False.
+            header (astropy.io.fits.header.Header, optional): _description_. Defaults to None.
+            Xoff (int, optional): _description_. Defaults to None.
+            Yoff (int, optional): _description_. Defaults to None.
+
+        Raises:
+            ValueError: _description_
+        """
         # start up message!
         print(DRUID_MESSAGE)
 
@@ -85,6 +107,8 @@ class sf:
         self.area_limit = area_limit
         self.smooth_sigma = smooth_sigma
         self.GPU = GPU
+        self.Xoff = Xoff
+        self.Yoff = Yoff
         
         if self.GPU:
 
@@ -110,9 +134,12 @@ class sf:
                 
         self.nproc = nproc
         
+        if header is not None:
+            self.header = header
+        
         if self.image_path is None:
             self.image = image
-            self.header = None
+            
         else:
             self.image, self.header = utils.open_image(self.image_path)
         
@@ -205,7 +232,16 @@ class sf:
     def set_background(self,detection_threshold : float,analysis_threshold,
                        set_bg : float = None, bg_map : bool = None, 
                        box_size : int = 10, mode : str = 'Radio'):
+        """Sets the background for the source finding algorithm.    
 
+        Args:
+            detection_threshold (int): _description_
+            analysis_threshold (int): _description_
+            set_bg (float, optional): _description_. Defaults to None.
+            bg_map (bool, optional): _description_. Defaults to None.
+            box_size (int, optional): _description_. Defaults to 10.
+            mode (str, optional): _description_. Defaults to 'Radio'.
+        """
         
         
         self.bg_map = bg_map
@@ -288,7 +324,12 @@ class sf:
 
 
     def source_characterising(self, use_gpu : bool = False):
+        """Source Characterising function. This function takes the catalogue and the image and calculates the source properties.
 
+        Args:
+            use_gpu (bool, optional): Option to use the GPU True to use and False to not, 
+                                      requires cupy module and a avalible GPU. Defaults to False.
+        """
         if self.mode == 'Radio':
             
             # need to read beam size from fits header
@@ -335,17 +376,28 @@ class sf:
             
             self.catalogue, self.polygons = source.optical_characteristing(use_gpu=use_gpu,catalogue=self.catalogue,cutout=self.image,background_map=self.local_bg,output=self.output)
         
-            
+        if self.Xoff is not None:
+            # correct for the poistion of the cutout. when using cutout from a larger image.
+            self.catalogue['Xc'] = self.catalogue['Xc'] + self.Xoff
+            self.catalogue['bbox1'] = self.catalogue['bbox1'] + self.Xoff 
+            self.catalogue['bbox3'] = self.catalogue['bbox3'] + self.Xoff
+        
+        if self.Yoff is not None:
+            # correct for the poistion of the cutout. when using cutout from a larger image.
+            self.catalogue['Yc'] = self.catalogue['Yc'] + self.Yoff
+            self.catalogue['bbox2'] = self.catalogue['bbox2'] + self.Yoff 
+            self.catalogue['bbox4'] = self.catalogue['bbox4'] + self.Yoff
 
-        if self.header:
-            try:
-                Ra, Dec = self._xy_to_RaDec(self.catalogue['Xc'],self.catalogue['Yc'])
-                self.catalogue['RA'] = Ra
-                self.catalogue['DEC'] = Dec
-                self.catalogue['RA'] = self.catalogue['RA'].astype(float)
-                self.catalogue['DEC'] = self.catalogue['DEC'].astype(float)
-            except:
-                pass
+        if self.header is not None:
+            #try:
+            print('Converting Xc and Yc to RA and DEC')
+            Ra, Dec = utils.xy_to_RaDec(self.catalogue['Xc'],self.catalogue['Yc'],self.header,mode=self.mode)
+            self.catalogue['RA'] = Ra
+            self.catalogue['DEC'] = Dec
+            self.catalogue['RA'] = self.catalogue['RA'].astype(float)
+            self.catalogue['DEC'] = self.catalogue['DEC'].astype(float)
+        #except:
+        #        pass
         
         self._set_types_of_dataframe()
         
@@ -486,7 +538,15 @@ class sf:
 
 
     def plot_sources(self,cmap,figsize=(10,10),norm='linear',save_path=None):
+        """Plots the source polygons on the image.
 
+        Args:
+            cmap (str): matplotlib cmap to use, e.g. 'gray'. See https://matplotlib.org/stable/tutorials/colors/colormaps.html for more info.
+            figsize (tuple, optional): Desired figure size. Defaults to (10,10).
+            norm (str, optional): _description_. Defaults to 'linear'.
+            save_path (str, optional): Save path if you desire to save the figure. Defaults to None.
+            
+        """
         plt.figure(figsize=figsize)
         plt.imshow(self.image,cmap=cmap,origin='lower',norm=norm)
         
@@ -496,3 +556,45 @@ class sf:
         if save_path is not None:
             plt.savefig(save_path)
         plt.show()
+
+
+
+    def save_catalogue(self,save_path,filetype=None,overwrite=False):
+        """Save Catalogue to a file.
+
+        Args:
+            save_path (str): Desired path to save the catalogue.
+            filetype (str, optional): Specify the file type or include the approprate file extention. Defaults to None.
+            overwrite (bool, optional): Overwrite the save file if the name is the same. Defaults to False.
+        
+        """
+        
+        # get the extension from the save_path
+        print('Saving Catalogue to file: ',save_path)
+        fileextention = save_path.split('.')[-1]
+        
+        if filetype is None:
+            filetype = fileextention
+            
+        if filetype == 'csv':
+            self.catalogue.to_csv(save_path,index=False,overwrite=overwrite)
+            print('Catalogue saved to: ',save_path)
+        
+        if filetype == 'fits':
+            print('Saving to fits with astropy')
+            table = astropy.table.Table.from_pandas(self.catalogue)
+            table.write(save_path,overwrite=overwrite)
+        
+        if filetype == 'hdf':
+            self.catalogue.to_hdf(save_path,key='catalogue',mode='w')
+            print('Catalogue saved to: ',save_path)
+        
+        if filetype == ('txt' or 'ascii'):
+            self.catalogue.to_csv(save_path,index=False,overwrite=overwrite)
+            print('Catalogue saved to: ',save_path)
+            
+        
+            
+            
+        
+        

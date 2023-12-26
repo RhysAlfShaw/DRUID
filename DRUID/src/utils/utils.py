@@ -14,6 +14,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from skimage import measure
 from scipy.ndimage import label
+from astropy.wcs import WCS
 
 
 try:
@@ -452,3 +453,33 @@ def _get_polygons_in_bbox(Xmin,Xmax,Ymin,Ymax,x1,y1,birth,death,mask,pad=1):
 
 
 
+def xy_to_RaDec(x,y,header,mode):
+        
+        """
+        
+        Convert an X and Y coordinate to RA and Dec using a header file with astropy.
+
+        Parameters:
+        x (float): The X coordinate.
+        y (float): The Y coordinate.
+        header_file (str): The path to the FITS header file.
+        stokes (int): The Stokes dimension.
+        freq (int): The frequency dimension.
+
+        Returns:
+        tuple: A tuple containing the RA and Dec in degrees.
+        
+        """ 
+        wcs = WCS(header)
+            
+        if mode == 'Radio': 
+            
+            stokes = 0  # stokes and freq are not used in this function.
+            freq = 0    # stokes and freq are not used in this function.
+            ra, dec, _, _ = wcs.all_pix2world(x, y, stokes, freq, 0)
+            
+        elif mode == 'optical':
+            # image is 2d so no stokes or freq
+            ra, dec = wcs.all_pix2world(x, y, 0)
+        
+        return ra, dec
