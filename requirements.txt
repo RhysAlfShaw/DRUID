@@ -1,0 +1,11 @@
+numpy
+pandas
+pytest
+numpy
+scikit-image
+cripser @ git+https://github.com/RhysAlfShaw/CubicalRipser_3dim
+astropy
+tqdm
+matplotlib
+cupy
+multiprocessing
