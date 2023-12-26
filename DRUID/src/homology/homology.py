@@ -139,7 +139,7 @@ def make_point_enclosure_assoc_GPU(Birth,Death,row,pd,img,img_gpu):
         enclosed_list (list): _description_
     """
     
-    mask = get_mask_gpu(Birth,Death,row,img_gpu)
+    mask = utils.get_mask_GPU(Birth,Death,row,img_gpu)
     mask_coords = np.column_stack((pd['x1'], pd['y1']))
     points_inside_mask = mask[mask_coords[:, 0].astype(int), mask_coords[:, 1].astype(int)]
     encloses_vectorized = pd.iloc[points_inside_mask].index.tolist()
@@ -326,7 +326,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit=0,o
                         row = pd.iloc[i]
                         Birth = row.Birth
                         Death = row.Death
-                        area = calculate_area_GPU(Birth,Death,row,img_gpu,img)
+                        area = calculate_area_GPU(Birth,Death,row,img_gpu)
                         area_list.append(area)
                         #percentage_completed = (i/len(pd))*100
                         

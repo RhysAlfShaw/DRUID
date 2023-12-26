@@ -485,7 +485,7 @@ class sf:
 
 
 
-    def plot_sources(self,cmap,figsize=(10,10),norm='linear'):
+    def plot_sources(self,cmap,figsize=(10,10),norm='linear',save_path=None):
 
         plt.figure(figsize=figsize)
         plt.imshow(self.image,cmap=cmap,origin='lower',norm=norm)
@@ -493,4 +493,6 @@ class sf:
         for i, poly in enumerate(self.polygons):
             if poly is not None:
                 plt.plot(poly[:,1],poly[:,0])
+        if save_path is not None:
+            plt.savefig(save_path)
         plt.show()
