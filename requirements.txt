@@ -7,4 +7,3 @@ cripser @ git+https://github.com/RhysAlfShaw/CubicalRipser_3dim
 astropy
 tqdm
 matplotlib
-cupy
