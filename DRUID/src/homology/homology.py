@@ -178,7 +178,7 @@ def correct_first_destruction(pd,output):
             
             new_row['Death'] = pd.loc[enlosed_i[0]]['Death']
             
-            ## this accounts for a bog were the entire series is placed in the death column.
+            ## this accounts for a bug were the entire series is placed in the death column.
             # not sure on the origin of this but the following corrects for it. It only occationally happends so this is not 
             # computationally expensive.
             if type(new_row['Death']) == pandas.core.series.Series:
