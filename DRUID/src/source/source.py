@@ -29,7 +29,7 @@ except:
 def create_params_df(cutup : bool, params : list):
 
         '''
-
+  
         Creates a pandas dataframe from the parameters.
 
         '''
@@ -57,7 +57,10 @@ def create_params_df(cutup : bool, params : list):
                                                   'parent_tag',
                                                   'Class',
                                                   'SNR',
-                                                  'Noise'])
+                                                  'Noise',
+                                                  'X0_cutout',
+                                                  'Y0_cutout',
+                                                  'Edge_flag'])
     
         return params
     
@@ -200,7 +203,7 @@ def radio_characteristing(catalogue : pd.DataFrame, sigma : float, cutout : np.n
 
     
     
-def large_mask_red_image_procc_GPU(Birth,Death,x1,y1,image):
+def large_mask_red_image_procc_GPU(Birth,Death,x1,y1,image,X0,Y0):
     '''
     Does all gpu processing for the large mask.
     
@@ -208,16 +211,18 @@ def large_mask_red_image_procc_GPU(Birth,Death,x1,y1,image):
     
     '''
     
-    
     mask = cp.zeros(image.shape,dtype=cp.bool_)
     mask = cp.logical_or(mask,cp.logical_and(image <= Birth, image > Death))
+    #print(mask)
     # mask_enclosed = self.get_enclosing_mask_gpu(y1,x1,mask)
     labeled_mask, num_features = cupy_label(mask)
     
     # Check if the specified pixel is within the mask
     if 0 <= y1 < mask.shape[1] and 0 <= x1 < mask.shape[0]:
         label_at_pixel = labeled_mask[x1, y1]
-        
+        #print(x1)
+        #print(y1)
+        #print(label_at_pixel)
         if label_at_pixel != 0:
             # Extract the connected component containing the specified pixel
             component_mask = (labeled_mask == label_at_pixel)
@@ -232,13 +237,18 @@ def large_mask_red_image_procc_GPU(Birth,Death,x1,y1,image):
             xmax = cp.max(non_zero_indices[1])
             ymax = cp.max(non_zero_indices[0])
             
+            # correct the bounding box for the cutout.
+            xmin = xmin #+ Y0
+            xmax = xmax #+ Y0
+            ymin = ymin #+ X0
+            ymax = ymax #+ X0
+            
             # images are not being cropped?
             
             red_image = image[ymin:ymax+1, xmin:xmax+1]
             red_mask = component_mask[ymin:ymax+1, xmin:xmax+1]
             
             return red_image, red_mask, xmin, xmax, ymin, ymax
-
 
 
 
@@ -293,7 +303,7 @@ def large_mask_red_image_procc_CPU(Birth,Death,x1,y1,image):
     
     
     
-def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=None,output=None):
+def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=None,output=None,cutupts=None):
     '''
     
     Characterising the Source Assuming the input image of of the format of a optical astronomical image.
@@ -314,12 +324,13 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
             raise ImportError('cupy not installed. GPU acceleration not possible.')
         
     image = cutout
-    #background_map = local_bg
 
-
+    cutouts_gpu = []
     if use_gpu:
         image_gpu = cp.asarray(image, dtype=cp.float64)
-    
+        for i in range(len(cutupts)):
+            cutouts_gpu.append(cp.asarray(cutupts[i], dtype=cp.float64))
+        
     x1 = catalogue['x1'].to_numpy()
     y1 = catalogue['y1'].to_numpy()
     x2 = catalogue['x2'].to_numpy()
@@ -328,9 +339,19 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
     Death = catalogue['Death'].to_numpy()
     parent_tag = catalogue['parent_tag'].to_numpy()
     Class = catalogue['Class'].to_numpy()
-    
-    print(len(catalogue))
-    print(len(Birth))
+    bg = catalogue['bg'].to_numpy()
+    X0 = catalogue['X0_cutout'].to_numpy()
+    Y0 = catalogue['Y0_cutout'].to_numpy()
+    num = catalogue['cutup_number'].to_numpy()
+    # map X0 and Y0 to the cutout number
+    # pair up X0 and Y0
+    #print(num)
+    #print(len(num))
+    #print(len(bg))
+    #print(len(catalogue))
+    #print(len(Birth))
+    #print(len(X0))
+    #print(len(Y0))
     
     params = []
     polygons = []
@@ -339,7 +360,8 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
     for i, source in tqdm(enumerate(Birth),total=len(Birth),desc='Calculating Source Properties..',disable=not output):
         
         if use_gpu == True:
-            red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_GPU(Birth[i],Death[i],x1[i],y1[i],image_gpu)
+            
+            red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_GPU(Birth[i],Death[i],x1[i],y1[i],cutouts_gpu[num[i]],X0[i],Y0[i])
             red_mask = red_mask.astype(int)
             
             red_image = red_image.get()
@@ -353,52 +375,73 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
             red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_CPU(Birth[i],Death[i],int(x1[i]),int(y1[i]),image)
             red_mask = red_mask.astype(int)
         
-        contour = utils._get_polygons_in_bbox(xmin,xmax,ymin,ymax,x1[i],y1[i],Birth[i],Death[i],red_mask)
+        #print(red_mask)
+        contour = utils._get_polygons_in_bbox(xmin,xmax,ymin,ymax,x1[i],y1[i],Birth[i],Death[i],red_mask,X0[i],Y0[i])
         
         source_props = utils.get_region_props(red_mask,image=red_image)
         source_props = utils.props_to_dict(source_props[0])
+        #print(background_map)
+        background_map = bg[i]
         red_background_mask = np.where(red_mask == 0, np.nan, red_mask*background_map)
         Noise = np.nanmean(red_background_mask)
         Flux_total = np.nansum(red_mask*red_image - red_background_mask)
         Area = source_props['area']
         SNR = Flux_total/Noise
-        Xc = source_props['centroid'][1]
-        Yc = source_props['centroid'][0]
         
-        bbox1 = source_props['bbox'][0]
-        bbox2 = source_props['bbox'][1]
-        bbox3 = source_props['bbox'][2]
-        bbox4 = source_props['bbox'][3]
+        Xc = source_props['centroid'][1] + xmin
+        Yc = source_props['centroid'][0] + ymin
+        
+        
+        # Edge of its cutout flag.
+        Edge_flag = 0
+        # if any of the points in the contour are on the edge of the cutout then set the flag to 1. Not working??
+        for point in contour:
+            if point[0] - Y0[i] == 0 or point[0] - Y0[i] == cutout.shape[0] or point[1] - X0[i] == 0 or point[1] - X0[i] == cutout.shape[1]:
+                Edge_flag = 1
+                break
+            
+        Xc = Xc + X0[i]
+        Yc = Yc + Y0[i]
+        bbox1 = source_props['bbox'][0] + X0[i] + xmin
+        bbox2 = source_props['bbox'][1] + Y0[i] + ymin
+        bbox3 = source_props['bbox'][2] + X0[i] + xmin
+        bbox4 = source_props['bbox'][3] + Y0[i] + ymin
         
         Maj = source_props['major_axis_length']
         Min = source_props['minor_axis_length']
         Pa = source_props['orientation']
         
-        params.append([i,
-                        Birth[i],
-                        Death[i],
-                        x1[i],
-                        y1[i],
-                        x2[i],
-                        y2[i],
-                        Flux_total,
-                        Flux_total,
-                        1,
-                        Area,
-                        Xc,
-                        Yc,
-                        bbox1,
-                        bbox2,
-                        bbox3,
-                        bbox4,
-                        Maj,
-                        Min,
-                        Pa,
-                        parent_tag[i],
-                        Class[i],
-                        SNR,
-                        Noise])
-        polygons.append(contour)
+        if Edge_flag != 1:
+        
+            params.append([i,
+                            Birth[i],
+                            Death[i],
+                            x1[i],
+                            y1[i],
+                            x2[i],
+                            y2[i],
+                            Flux_total,
+                            Flux_total,
+                            1,
+                            Area,
+                            Xc,
+                            Yc,
+                            bbox1,
+                            bbox2,
+                            bbox3,
+                            bbox4,
+                            Maj,
+                            Min,
+                            Pa,
+                            parent_tag[i],
+                            Class[i],
+                            SNR,
+                            Noise,
+                            X0[i],
+                            Y0[i],
+                            Edge_flag])
+             
+            polygons.append(contour)
     #print(params)
     #print(len(params[0]))
     return create_params_df(False,params), polygons

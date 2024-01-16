@@ -251,7 +251,7 @@ def process_assoc(i):
 
 
 
-def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit=0,output=True,bg_map=False,area_limit=3,nproc=1,GPU=False):
+def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit=0,output=True,bg_map=False,area_limit=3,nproc=1,GPU=False,lifetime_limit_fraction=2):
     
     
     global GPU_Option 
@@ -293,8 +293,14 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit=0,o
         pd['Death'] = np.where(pd['Death'] < analysis_threshold_val, analysis_threshold_val, pd['Death'])
        
     pd['lifetime'] = abs(pd['Death'] - pd['Birth'])
-        
-
+    
+    pd['lifetimeFrac'] = pd['Birth']/pd['Death']
+    
+    # fiter by lifetimeFrac
+    
+    pd = pd[pd['lifetimeFrac']>lifetime_limit_fraction]
+    
+    pd['bg'] = local_bg
     print('Persis Diagram computed. Length: ',len(pd))
 
     if lifetime_limit > 0:

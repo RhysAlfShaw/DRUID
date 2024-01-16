@@ -98,7 +98,67 @@ def cut_image(size : int, image : np.ndarray):
 
     return cutouts, coords
 
+import numpy as np
 
+
+def cut_image_buff(image, cutout_size, buffer_size):
+    """
+    Cuts an image into smaller images of the specified size (square) with optional overlap.
+
+    Args:
+        image (np.ndarray): The image to be cut.
+        size (int): The size of the cutouts.s
+        buffer (int): The size of the buffer for overlap.
+
+    Returns:
+        cutouts (list): A list of the cutout images.
+        coords (list): A list of the coordinates of the cutouts.
+    """
+
+    # Initialize lists to store cut-up images and their locations
+    height, width = image.shape
+    cutup_images = []
+    cutup_locations = []
+
+    # Iterate through the image with the specified cutout size and buffer
+    for y in range(0, height, cutout_size - buffer_size):
+        for x in range(0, width, cutout_size - buffer_size):
+            # coordinates for the current cutout
+            left = max(0, x - buffer_size)
+            upper = max(0, y - buffer_size)
+            right = min(width, x + cutout_size + buffer_size)
+            lower = min(height, y + cutout_size + buffer_size)
+
+            # Crop the image array to get the cutout
+            cutout = image[upper:lower, left:right]
+            
+            # Append the cutout and its location to the lists
+            cutup_images.append(cutout)
+            cutup_locations.append([upper,left])
+
+    return cutup_images, cutup_locations
+
+
+
+def remove_duplicates(catalogue):
+    """
+    
+    Removes duplicate sources from the catalogue.
+    
+    Args:
+        catalogue (pd.DataFrame): The catalogue to be cleaned.
+        
+    Returns:
+        catalogue (pd.DataFrame): The cleaned catalogue.
+    
+    """
+    # sort by area
+    catalogue = catalogue.sort_values(by=['area'],ascending=False)
+    catalogue = catalogue.drop_duplicates(subset=['Birth','Death'])
+    # sort by ID
+    # choose the row with the highest area
+    
+    return catalogue
 
 
 
@@ -433,21 +493,27 @@ def _get_polygons_CPU(x1,y1,birth,death, image : np.ndarray):
 
     return contour
 
+import matplotlib.pyplot as plt
 
-def _get_polygons_in_bbox(Xmin,Xmax,Ymin,Ymax,x1,y1,birth,death,mask,pad=1):
+def _get_polygons_in_bbox(Xmin,Xmax,Ymin,Ymax,x1,y1,birth,death,mask,X0,Y0,pad=1):
         
         
-    mask = np.pad(mask, pad, mode='constant', constant_values=0)    
+    mask = np.pad(mask, pad, mode='constant', constant_values=0)   
+    #print(mask) 
+    #try:
     contour = measure.find_contours(mask, 0)[0]
+    #except:
+    #    plt.imshow(mask)
+    #    plt.savefig('mask.png')
     contour = measure.find_contours(mask, 0)[0]
-    
+    #print(contour)
     # remove the border
     contour[:,0] -= pad
     contour[:,1] -= pad
     
     # correct the coordinates to the original image
-    contour[:,0] += Ymin
-    contour[:,1] += Xmin
+    contour[:,0] += Ymin + Y0
+    contour[:,1] += Xmin + X0
     
     return contour
 

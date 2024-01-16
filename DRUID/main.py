@@ -73,7 +73,8 @@ class sf:
 
 
     def __init__(self, image : np.ndarray = None, image_path : str = None, mode : str = None, 
-                 pb_path : str = None, cutup : bool = False, cutup_size : int = 500, output : bool = True, 
+                 pb_path : str = None, cutup : bool = False, cutup_size : int = 500, 
+                 cutup_buff : int = None, output : bool = True, 
                  area_limit : int = 5, smooth_sigma = 1, nproc : int = 1, GPU : bool = False, 
                  header : astropy.io.fits.header.Header = None, Xoff : int = None, Yoff : int = None) -> None:
         """Initialise the DRUID, here general parameters can be set..
@@ -109,6 +110,7 @@ class sf:
         self.GPU = GPU
         self.Xoff = Xoff
         self.Yoff = Yoff
+        self.cutup_buff = cutup_buff
         
         if self.GPU:
 
@@ -162,9 +164,9 @@ class sf:
         
         if self.cutup:
             
-            self.cutouts, self.coords = utils.cut_image(cutup_size, self.image)
+            self.cutouts, self.coords = utils.cut_image_buff(self.image,cutup_size, buffer_size=self.cutup_buff)
             
-            if self.pb_PATH is not None:
+            if self.pb_path is not None:
                 self.pb_cutouts, self.pb_coords = utils.cut_image(cutup_size,self.pb_image)
                 
             else:
@@ -180,7 +182,7 @@ class sf:
 
 
 
-    def phsf(self, lifetime_limit : float = 0):
+    def phsf(self, lifetime_limit : float = 0,lifetime_limit_fraction : float = 2,):
         
         """ Performs the persistent homology source finding algorithm.
         
@@ -205,20 +207,28 @@ class sf:
                 
                 catalogue = homology.compute_ph_components(cutout,self.local_bg[i],analysis_threshold_val=self.analysis_threshold_val[i],
                                                         lifetime_limit=lifetime_limit,output=self.output,bg_map=self.bg_map,area_limit=self.area_limit,
-                                                        nproc=self.nproc,GPU=self.GPU)
-            
+                                                        nproc=self.nproc,GPU=self.GPU,lifetime_limit_fraction=lifetime_limit_fraction)
+                
                 catalogue['Y0_cutout'] = self.coords[i][0]
                 catalogue['X0_cutout'] = self.coords[i][1]
+                # corrent the x1 position for the cutout
+                catalogue['x1'] = catalogue['x1'] #+ self.coords[i][0]
+                catalogue['x2'] = catalogue['x2'] #+ self.coords[i][0]
+                catalogue['y1'] = catalogue['y1'] #+ self.coords[i][1]
+                catalogue['y2'] = catalogue['y2'] #+ self.coords[i][1]
+                catalogue['cutup_number'] = i
                 catalogue_list.append(catalogue)
-
             # combine the catalogues
             self.catalogue = pd.concat(catalogue_list)
+            # remove duplicates and keep the one closest to its cutout centre.
+            self.catalogue = utils.remove_duplicates(self.catalogue)
+            
         
         else:
             
             self.catalogue = homology.compute_ph_components(self.image,self.local_bg,analysis_threshold_val=self.analysis_threshold_val,
                                                             lifetime_limit=lifetime_limit,output=self.output,bg_map=self.bg_map,area_limit=self.area_limit,
-                                                            nproc=self.nproc,GPU=self.GPU)
+                                                            nproc=self.nproc,GPU=self.GPU,lifetime_limit_fraction=lifetime_limit_fraction)
 
 
 
@@ -374,7 +384,8 @@ class sf:
         
         if self.mode == 'optical':
             
-            self.catalogue, self.polygons = source.optical_characteristing(use_gpu=use_gpu,catalogue=self.catalogue,cutout=self.image,background_map=self.local_bg,output=self.output)
+            print(self.catalogue.columns)
+            self.catalogue, self.polygons = source.optical_characteristing(use_gpu=use_gpu,catalogue=self.catalogue,cutout=self.image,background_map=self.local_bg,output=self.output,cutupts=self.cutouts)
         
         if self.Xoff is not None:
             # correct for the poistion of the cutout. when using cutout from a larger image.
@@ -549,6 +560,7 @@ class sf:
         """
         plt.figure(figsize=figsize)
         plt.imshow(self.image,cmap=cmap,origin='lower',norm=norm)
+        #plt.scatter(self.catalogue['Xc'],self.catalogue['Yc'],s=10,c='r')
         
         for i, poly in enumerate(self.polygons):
             if poly is not None:
@@ -592,6 +604,26 @@ class sf:
         if filetype == ('txt' or 'ascii'):
             self.catalogue.to_csv(save_path,index=False,overwrite=overwrite)
             print('Catalogue saved to: ',save_path)
+            
+            
+            
+            
+    def save_polygons_to_ds9(self, filename):
+
+        '''
+        Saves the polygons to a ds9 region file.
+        '''
+
+        with open(filename, 'w') as f:
+            f.write('# Region file format: DS9 version 4.1\n')
+            f.write('global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1\n')
+            for polygon in self.polygons:
+                f.write('polygon(')
+                for i, point in enumerate(polygon):
+                    f.write('{:.2f},{:.2f}'.format(point[1], point[0])) # note this transformation as the index in some CARTA inmages start at -1.
+                    if i < len(polygon) - 1:
+                        f.write(',')
+                f.write(')\n')
             
         
             
