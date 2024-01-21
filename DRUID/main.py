@@ -12,8 +12,9 @@ Description: Main file for DRUID
 version = 'v1.0'
 
 from .src.utils import utils 
-from .src.homology import homology 
+from .src.homology import homology_new as homology
 from .src.background import background
+from matplotlib import colors
 from .src.source import source
 import numpy as np
 from skimage import measure
@@ -145,6 +146,11 @@ class sf:
         else:
             self.image, self.header = utils.open_image(self.image_path)
         
+        if mode == 'Radio':
+            # add 1 pixel padding to all sides of the image
+            self.image = np.pad(self.image,((1,1),(1,1)),mode='constant',constant_values=0)
+            
+        
         if self.smooth_sigma !=0:
             self.image = utils.smoothing(self.image,self.smooth_sigma)
             print('Image smoothed with sigma = {}'.format(self.smooth_sigma))
@@ -163,15 +169,28 @@ class sf:
         
         
         if self.cutup:
-            
-            self.cutouts, self.coords = utils.cut_image_buff(self.image,cutup_size, buffer_size=self.cutup_buff)
-            
+            self.cutup_size = cutup_size
+            print('Cutting up image {}x{} into {}x{} cutouts'.format(self.image.shape[0],self.image.shape[1],cutup_size,cutup_size))
+            if self.cutup_buff is not None:
+                self.cutouts, self.coords = utils.cut_image_buff(self.image,cutup_size, buffer_size=self.cutup_buff)
+            else:
+                self.cutouts, self.coords = utils.cut_image(cutup_size,self.image)
+                        
             if self.pb_path is not None:
                 self.pb_cutouts, self.pb_coords = utils.cut_image(cutup_size,self.pb_image)
                 
             else:
                 self.pb_cutouts = None
                 self.pb_coords = None
+        else:
+            self.cutup_size = None
+            self.cutouts = None
+            self.coords = None
+            self.pb_cutouts = None
+            self.pb_coords = None
+            
+        
+            
         
         
         
@@ -200,46 +219,208 @@ class sf:
         if self.cutup == True:
             
             catalogue_list = []
-            
+            IDoffset = 0
             for i, cutout in enumerate(tqdm(self.cutouts)):
                 
                 print("Computing for Cutout number :{}/{}".format(i+1, len(self.cutouts)))
                 
-                catalogue = homology.compute_ph_components(cutout,self.local_bg[i],analysis_threshold_val=self.analysis_threshold_val[i],
+                catalogue = homology.compute_ph_components(cutout,self.local_bg,analysis_threshold_val=self.analysis_threshold_val,
                                                         lifetime_limit=lifetime_limit,output=self.output,bg_map=self.bg_map,area_limit=self.area_limit,
-                                                        nproc=self.nproc,GPU=self.GPU,lifetime_limit_fraction=lifetime_limit_fraction)
+                                                        GPU=self.GPU,lifetime_limit_fraction=lifetime_limit_fraction,mean_bg=self.mean_bg,
+                                                        IDoffset=IDoffset,box_size=self.box_size,detection_threshold=self.sigma)
+                if len(catalogue) == 0:
+                    continue
+                
+                IDoffset += len(catalogue)
                 
                 catalogue['Y0_cutout'] = self.coords[i][0]
                 catalogue['X0_cutout'] = self.coords[i][1]
                 # corrent the x1 position for the cutout
-                catalogue['x1'] = catalogue['x1'] #+ self.coords[i][0]
-                catalogue['x2'] = catalogue['x2'] #+ self.coords[i][0]
-                catalogue['y1'] = catalogue['y1'] #+ self.coords[i][1]
-                catalogue['y2'] = catalogue['y2'] #+ self.coords[i][1]
+                catalogue['x1'] = catalogue['x1'] + self.coords[i][0]
+                catalogue['x2'] = catalogue['x2'] + self.coords[i][0]
+                catalogue['y1'] = catalogue['y1'] + self.coords[i][1]
+                catalogue['y2'] = catalogue['y2'] + self.coords[i][1]
+                catalogue['bbox1'] = catalogue['bbox1'] + self.coords[i][0]
+                catalogue['bbox2'] = catalogue['bbox2'] + self.coords[i][1]
+                catalogue['bbox3'] = catalogue['bbox3'] + self.coords[i][0]
+                catalogue['bbox4'] = catalogue['bbox4'] + self.coords[i][1]
+                catalogue['distance_from_center'] = ((catalogue['x1']-cutout.shape[0]/2)**2 + (catalogue['y1']-cutout.shape[1]/2)**2)**0.5
                 catalogue['cutup_number'] = i
                 catalogue_list.append(catalogue)
-            # combine the catalogues
-            self.catalogue = pd.concat(catalogue_list)
-            # remove duplicates and keep the one closest to its cutout centre.
-            self.catalogue = utils.remove_duplicates(self.catalogue)
+                self.catalogue = pd.concat(catalogue_list)
+                # remove duplicates and keep the one closest to its cutout centre.
+                #print('before duplicated removal :',len(self.catalogue))
+                #self.catalogue = utils.remove_duplicates(self.catalogue)
+                # drop any with edge_flag == 1
+                self.catalogue = self.catalogue[self.catalogue.edge_flag != 1]
+                self.catalogue = self.catalogue.sort_values(by=['distance_from_center'],ascending=True)
+                self.catalogue = self.catalogue.drop_duplicates(subset=['x1','y1','Birth'], keep='first')
+                
+        else:
+            IDoffset = 0
+            catalogue = homology.compute_ph_components(self.image,self.local_bg,analysis_threshold_val=self.analysis_threshold_val,
+                                                        lifetime_limit=lifetime_limit,output=self.output,bg_map=self.bg_map,area_limit=self.area_limit,
+                                                        GPU=self.GPU,lifetime_limit_fraction=lifetime_limit_fraction,mean_bg=self.mean_bg,
+                                                        IDoffset=IDoffset,box_size=self.cutup_size,detection_threshold=self.sigma)
+            self.catalogue = catalogue
+            self.catalogue['Y0_cutout'] = 0
+            self.catalogue['X0_cutout'] = 0
+            
+            self.catalogue = self.catalogue[self.catalogue.edge_flag != 1]
+        
+        # keeps the one closest to the center of its cutout.
+        
+        
+        
+        self.catalogue = self.catalogue.sort_values(by=['lifetime'],ascending=False)
+        #print('after duplicate removal :',len(self.catalogue))
+        
+        # do enclosed_i evaluation with the bounding box to ensure we dont use the whole image.
+        # plt.figure(figsize=(20,20))
+        # plt.imshow(self.image,cmap='gray_r',norm=colors.LogNorm(clip=True))
+        # plt.scatter(self.catalogue.y1,self.catalogue.x1,c='r',marker='x')
+        # # # # plot the bounding boxes
+        # for i, row in self.catalogue.iterrows():
+        #       ymin = row.bbox1
+        #       ymax = row.bbox3
+        #       xmin = row.bbox2
+        #       xmax = row.bbox4
+        #       plt.plot([xmin,xmax,xmax,xmin,xmin],[ymin,ymin,ymax,ymax,ymin],c='r')
+        # plt.savefig('test.png')
+        # time.sleep(3)
+        enclosed_i_list = []
+        t0 = time.time()
+        import cupy as cp
+        for i in tqdm(range(0,len(self.catalogue)),total=len(self.catalogue),desc='Calculating enclosed_i',disable=not self.output):
+            row = self.catalogue.iloc[i]
+            x1 = row.x1 - row.bbox1 + 1
+            y1 = row.y1 - row.bbox2 + 1
+            Birth = row.Birth
+            Death = row.Death
+            # is this a new row?
+            #if row.new_row == 1:
+            
+            # and buffer around the bounding box.
+            
+            img = self.image[row.bbox1-1:row.bbox3+1,row.bbox2-1:row.bbox4+1]
+            # reduce the cat to just the sources in the bounding box.
+            
+            cat = self.catalogue[self.catalogue['x1'] > row.bbox1]
+            cat = cat[cat['x1'] < row.bbox3]
+            cat = cat[cat['y1'] > row.bbox2]
+            cat = cat[cat['y1'] < row.bbox4]
+            cat['x1'] = cat['x1'] - row.bbox1 + 1
+            cat['y1'] = cat['y1'] - row.bbox2 + 1
+                
+                                
+            # plt.imshow(img,cmap='gray_r',norm=colors.LogNorm(clip=True,vmin=1E-13,vmax=1E-9))
+            # plt.scatter(cat.y1,cat.x1,c='r',marker='x')
+            # plt.savefig('test.png')
+            # plt.close()       
+            # # sleep
+            # time.sleep(2)
+            if self.GPU==True:
+                
+                img_gpu = cp.asarray(img, dtype=cp.float64)
+                enclosed_i = homology.make_point_enclosure_assoc_GPU(0,x1,y1,Birth,Death,cat,img_gpu)
+                enclosed_i_list.append(enclosed_i)
+            else:
+                enclosed_i = homology.make_point_enclosure_assoc_CPU(0,x1,y1,Birth,Death,cat,img)
+                enclosed_i_list.append(enclosed_i)
+                
+        print('enclosed_i calculated! t='+str(time.time()-t0)+' s')
+        self.catalogue['enclosed_i'] = enclosed_i_list
+        
+        # correct for first destruction
+        
+        print(len(self.catalogue))
+        
+        self.catalogue = homology.correct_first_destruction(self.catalogue,output=not self.output)
+        
+    
+        # parent tag
+        print("Assigning parent tags..")
+        
+        self.catalogue = homology.parent_tag_func_vectorized_new(self.catalogue)
+        #print(self.catalogue['parent_tag'].value_counts())
+        print("Classifying sources in hirearchy..")
+        self.catalogue['Class'] = self.catalogue.apply(homology.classify_single,axis=1)
+        # put ID at the front
+        print(self.catalogue)
+            
+            
             
         
-        else:
+        
+    def set_background(self,detection_threshold,analysis_threshold,
+                       set_bg=None,bg_map_bool=False,box_size=None,mode='mad_std'):
+        
+        print('Setting background..')
+        
+        
+        self.sigma = detection_threshold
+        self.analysis_threshold = analysis_threshold
+        self.bg_map = bg_map_bool
+        # mode should be MAD_Std, RMS or other.
+        
+        if mode == 'Radio':
+            # old verion was called radio.    
+            mode = 'mad_std'
+
+        # need to account dor the cutputs if not usinh bg_map.
+        
+        # bg_map and cutup are require only the same code.
+        
+        # bg_map and no cuput is the same as bg_map and cutup.
+        
+        # no cutup and no bg_map is just one estimation for the whole image.
+        
+        if self.cutup == True:
+        
+            # we want to do the bg_map but for the cutout dims. as the box size is in pixels.
+            self.bg_map = True
+            bg_map_bool = True
+            # which is smaller the cutout size or the box size?
+            if box_size is None:
+                box_size = self.cutup_size
+            else:
+                if box_size > self.cutup_size:
+                    box_size = self.cutup_size
+                else:
+                    pass
+        self.box_size = box_size
+        if bg_map_bool == True:
+            print('Creating a background map. Inputed Box size = ',box_size)
+            # these will be returned as arrays like a map.
+            std, mean_bg = background.calculate_background_map(self.image,box_size,mode=mode)
+            print('Background map created.')
+            print('Mean Background across cutouts: ', np.nanmean(std))
+            print('Median of bg distribution: ', np.nanmean(mean_bg))
             
-            self.catalogue = homology.compute_ph_components(self.image,self.local_bg,analysis_threshold_val=self.analysis_threshold_val,
-                                                            lifetime_limit=lifetime_limit,output=self.output,bg_map=self.bg_map,area_limit=self.area_limit,
-                                                            nproc=self.nproc,GPU=self.GPU,lifetime_limit_fraction=lifetime_limit_fraction)
+        else:
+            print('Not creating a background map.')
+            std, mean_bg = background.calculate_background(self.image,mode=mode)
+            print('Background set to: ',std)
+            print('Background mean set to: ',mean_bg)
+            
+        if set_bg is not None:
+            # set bg should be a tuple of (std,mean_bg)
+            print('User has set the background.')
+            std = set_bg[0]
+            mean_bg = set_bg[1]
+            print('Background set to: ',std)
+            print('Background mean set to: ',mean_bg)
+        
+        
+        self.local_bg = std*self.sigma
+        self.analysis_threshold_val = std*self.analysis_threshold
+        self.mean_bg = mean_bg
+        
 
 
 
 
-
-
-
-
-
-
-    def set_background(self,detection_threshold : float,analysis_threshold,
+    def set_background_old(self,detection_threshold : float,analysis_threshold,
                        set_bg : float = None, bg_map : bool = None, 
                        box_size : int = 10, mode : str = 'Radio'):
         """Sets the background for the source finding algorithm.    
@@ -268,34 +449,38 @@ class sf:
                     # users wants to use background map so lets make it
                     local_bg_list = []
                     analysis_threshold_list = []
-                    
+                    mean_bg_list = []
                     for i, cutout in enumerate(self.cutouts):
-                        local_bg_map = background.radio_background_map(cutout, box_size)
+                        local_bg_map, mean_bg = background.radio_background_map(cutout, box_size)
                         analysis_threshold_list.append(local_bg_map*self.analysis_threshold)
                         local_bg_list.append(local_bg_map*self.sigma)
-                    
+                        mean_bg_list.append(mean_bg)
                 else:
                     local_bg_list = []
                     analysis_threshold_list = []
+                    mean_bg_list = []
                     for cutout in self.cutouts:
-                        local_bg = background.radio_background(cutout)
+                        local_bg, mean_bg = background.radio_background(cutout)
                         analysis_threshold_list.append(local_bg*self.analysis_threshold)
                         local_bg_list.append(local_bg*self.sigma)
-                local_bg = local_bg_list
+                        mean_bg_list.append(mean_bg)
+                local_bg = local_bg_list    
                 analysis_threshold = analysis_threshold_list
+                mean_bg = mean_bg_list
                     
             else:
 
                 # Radio background is calculated using the median absolute deviation of the total image.
                 if bg_map is not None:
-                    local_bg_o = background.radio_background_map(self.image, box_size)
+                    local_bg_o, mean_bg = background.radio_background_map(self.image, box_size)
                     local_bg = local_bg_o*self.sigma
                     analysis_threshold = local_bg_o*self.analysis_threshold    
                 else:
-                    local_bg_o = background.radio_background(self.image)
+                    local_bg_o, mean_bg = background.radio_background(self.image)
                     local_bg = local_bg_o*self.sigma
                     analysis_threshold = local_bg_o*self.analysis_threshold
-
+                    
+                    
         if mode == 'Optical':
             # Optical background is calculated using a random sample of pixels
             mean_bg, std_bg = background.optical_background(nsamples=1000)
@@ -311,6 +496,8 @@ class sf:
             
         self.analysis_threshold_val = analysis_threshold
         self.local_bg = local_bg
+        self.mean_bg = mean_bg
+        print(self.mean_bg)
         
         if bg_map:
             print('Using bg_map for analysis.')
@@ -318,6 +505,7 @@ class sf:
             if self.cutup:
             
                 print('Mean Background across cutouts: ', np.nanmean(self.local_bg))
+                print('Median of bg distribution: ', np.nanmean(self.mean_bg))
             
             else:
                 print('Background set to: ',self.local_bg)
@@ -340,52 +528,10 @@ class sf:
             use_gpu (bool, optional): Option to use the GPU True to use and False to not, 
                                       requires cupy module and a avalible GPU. Defaults to False.
         """
-        if self.mode == 'Radio':
-            
-            # need to read beam size from fits header
-
-            if self.cutup:
-            
-                for i, cutout in enumerate(self.cutouts):
-
-                    cutout_cat = self.catalogue[(self.catalogue['Y0_cutout'] == self.coords[i][0]) & (self.catalogue['X0_cutout'] == self.coords[i][1])]
-                    
-                    if self.pb_PATH is not None:
-                        Cutout_catalogue = source.radio_characteristing(catalogue=cutout_cat,cutout=cutout,cutout_pb=self.pb_cutouts[i],background_map=self.local_bg[i])
-                    else:
-                        Cutout_catalogue = source.radio_characteristing(catalogue=cutout_cat,cutout=cutout,cutout_pb=None,background_map=self.local_bg[i])
-                    # add cutout coords to catalogue
-                    
-                    Cutout_catalogue['Y0_cutout'] = self.coords[i][0] # these get removed in the previous function.
-                    Cutout_catalogue['X0_cutout'] = self.coords[i][1]
-                    
-                    if i == 0:
-                        Processed_catalogue = Cutout_catalogue
-                    else:
-                        Processed_catalogue = pd.concat([Processed_catalogue,Cutout_catalogue])
-                self.catalogue = Processed_catalogue
-                # correct for the poistion of the cutout.
-
-                self.catalogue['y1'] = self.catalogue['y1'] + self.catalogue['X0_cutout']
-                self.catalogue['y2'] = self.catalogue['y2'] + self.catalogue['X0_cutout']
-                self.catalogue['x1'] = self.catalogue['x1'] + self.catalogue['Y0_cutout']
-                self.catalogue['x2'] = self.catalogue['x2'] + self.catalogue['Y0_cutout']
-                self.catalogue['Xc'] = self.catalogue['Xc'] + self.catalogue['X0_cutout']
-                self.catalogue['Yc'] = self.catalogue['Yc'] + self.catalogue['Y0_cutout']
-                self.catalogue['bbox1'] = self.catalogue['bbox1'] + self.catalogue['Y0_cutout'] 
-                self.catalogue['bbox2'] = self.catalogue['bbox2'] + self.catalogue['X0_cutout'] 
-                self.catalogue['bbox3'] = self.catalogue['bbox3'] + self.catalogue['Y0_cutout']
-                self.catalogue['bbox4'] = self.catalogue['bbox4'] + self.catalogue['X0_cutout']
-
-                # add cutout coords to catalogue
-
-            else:
-                source.radio_characteristing(catalogue=self.catalogue,cutout=self.image,background_map=self.local_bg)
         
-        if self.mode == 'optical':
-            
-            print(self.catalogue.columns)
-            self.catalogue, self.polygons = source.optical_characteristing(use_gpu=use_gpu,catalogue=self.catalogue,cutout=self.image,background_map=self.local_bg,output=self.output,cutupts=self.cutouts)
+        self.catalogue, self.polygons = source.measure_source_properties(use_gpu=use_gpu,catalogue=self.catalogue,
+                                                                           cutout=self.image,background_map=self.local_bg,
+                                                                           output=self.output,cutupts=self.cutouts,mode=self.mode,header=self.header)
         
         if self.Xoff is not None:
             # correct for the poistion of the cutout. when using cutout from a larger image.
@@ -523,7 +669,6 @@ class sf:
         self.catalogue['y2'] = self.catalogue['y2'].astype(float)
         self.catalogue['Flux_total'] = self.catalogue['Flux_total'].astype(float)
         self.catalogue['Flux_peak'] = self.catalogue['Flux_peak'].astype(float)
-        self.catalogue['Corr_f'] = self.catalogue['Corr_f'].astype(float)
         self.catalogue['Area'] = self.catalogue['Area'].astype(float)
         self.catalogue['Xc'] = self.catalogue['Xc'].astype(float)
         self.catalogue['Yc'] = self.catalogue['Yc'].astype(float)
@@ -625,6 +770,19 @@ class sf:
                         f.write(',')
                 f.write(')\n')
             
+    def save_polygons_to_hdf5(self, filename):
+
+        '''
+        Saves the polygons to a hdf5 file.
+        '''
+        import h5py
+
+        hf = h5py.File(filename, 'w')
+        for i in range(len(self.catalogue)):
+            key = self.catalogue['ID'][i]
+            hf.create_dataset(str(key), data=self.catalogue['contour'][i])
+        hf.close()
+        
         
             
             

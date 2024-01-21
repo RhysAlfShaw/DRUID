@@ -3,3 +3,11 @@
 *.vscode
 Test_catlogue.fits
 test_gpu.png
+*.svg
+*.fits
+*.o
+*.O 
+*.out
+*.OUTPUT
+*.png
+*.pdf

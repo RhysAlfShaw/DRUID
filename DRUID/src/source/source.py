@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from scipy.ndimage import label
-
+import pdb
 
 try:
     import cupy as cp
@@ -33,171 +33,43 @@ def create_params_df(cutup : bool, params : list):
         Creates a pandas dataframe from the parameters.
 
         '''
-
+        
         params = pd.DataFrame(params,columns=['ID',
-                                                  'Birth',
-                                                  'Death',
-                                                  'x1',
-                                                  'y1',
-                                                  'x2',
-                                                  'y2',
-                                                  'Flux_total',
-                                                  'Flux_peak',
-                                                  'Corr_f',
-                                                  'Area',
-                                                  'Xc',
-                                                  'Yc',
-                                                  'bbox1',
-                                                  'bbox2',
-                                                  'bbox3',
-                                                  'bbox4',
-                                                  'Maj',
-                                                  'Min',
-                                                  'Pa',
-                                                  'parent_tag',
-                                                  'Class',
-                                                  'SNR',
-                                                  'Noise',
-                                                  'X0_cutout',
-                                                  'Y0_cutout',
-                                                  'Edge_flag'])
+                                                'Birth',
+                                                'Death',
+                                                'x1',
+                                                'y1',
+                                                'x2',
+                                                'y2',
+                                                'Flux_total',
+                                                'Flux_peak',
+                                                'Flux_correction_factor',
+                                                'Area',
+                                                'Xc',
+                                                'Yc',
+                                                'bbox1',
+                                                'bbox2',
+                                                'bbox3',
+                                                'bbox4',
+                                                'Maj',
+                                                'Min',
+                                                'Pa',
+                                                'parent_tag',
+                                                'Class',
+                                                'SNR',
+                                                'Noise',
+                                                'X0_cutout',
+                                                'Y0_cutout',
+                                                'mean_bg',
+                                                'Edge_flag',
+                                                'contour',
+                                                'enclosed_i'])
     
         return params
     
 
 
 
-
-
-
-
-
-
-def radio_characteristing(catalogue : pd.DataFrame, sigma : float, cutout : np.ndarray = None, cutup : bool = False,
-                          pb_PATH : str = None, pb_image : np.ndarray = None, local_bg : np.ndarray = None,
-                          cutout_pb : np.ndarray = None, background_map : np.ndarray = None):
-    
-    # get beam in pixels
-
-    if cutout is None:
-        cutup = False
-        Beam, BMAJp, BMINp, BPA = utils.calculate_beam()
-        background_map = local_bg
-
-
-    else:
-        Beam, BMAJ, BMIN, BPA = utils.calculate_beam()
-        image = cutout
-        cutup = True
-        if pb_PATH is not None:
-            pb_image = cutout_pb
-        
-        background_map = background_map
-
-
-    # for each source in the catalogue create mask and measure properties. prephorm source flux correction.
-
-    flux_correction_list = []
-
-    params = []
-
-    for i, source in tqdm(catalogue.iterrows(),total=len(catalogue),desc='Calculating Source Properties..',disable=not self.output):
-         
-        try:
-
-            mask = utils.get_mask(row=source,image=image)
-    
-        except:
-
-            continue
-
-        source_props = utils.get_region_props(mask,image=image)
-
-        source_props = utils.props_to_dict(source_props[0])
-
-        peak_coords = np.where(image == source_props['max_intensity'])
-
-        y_peak_loc = peak_coords[0][0]
-        x_peak_loc = peak_coords[1][0]
-
-        Model_Beam = utils.model_beam_func(source_props['max_intensity'],image.shape,
-                                           x_peak_loc,y_peak_loc,BMAJp/2,
-                                           BMINp/2,BPA)
-        Flux_correction_factor = utils.flux_correction_factor(mask, Model_Beam)
-
-        flux_correction_list.append(Flux_correction_factor)
-
-        # calculate the flux of the source with option for pb correction.
-            
-        if pb_PATH is not None:
-            
-            background_mask = mask*background_map/sigma                    # fixed problem with slight offset.
-            Flux_total = np.nansum(mask*image/pb_image - background_mask)/Beam   # may need to be altered for universality.
-            Flux_peak = np.nanmax(mask*image/pb_image) - background_mask[y_peak_loc,x_peak_loc]
-        
-            # may need to be altered for universality.
-            # get location of peak in the image
-            
-            Flux_peak_loc = np.where(image == Flux_peak)
-            Flux_peak = Flux_peak - background_mask[Flux_peak_loc[0][0],Flux_peak_loc[1][0]]
-            
-        else:
-            
-            background_mask = mask*background_map/sigma                 # fixed problem with slight offset.
-            #print(self.Beam)
-            Flux_total = np.nansum(mask*image - background_mask)/Beam   # may need to be altered for universality.
-            Flux_peak = np.nanmax(mask*image) - background_mask[y_peak_loc,x_peak_loc]
-        
-        #pdb.set_trace() # for debugging
-        background_mask = np.where(background_mask == 0, np.nan, background_mask) # set background mask to nan where there is no background.
-        Noise = np.nanmean(background_mask)
-       
-        #print('Noise: ',Noise)
-        Flux_total = Flux_total*Flux_correction_factor
-        
-        Area = np.sum(mask)
-        SNR = Flux_total/Noise
-        Xc = source_props['centroid'][1]
-        Yc = source_props['centroid'][0]
-
-        bbox1 = source_props['bbox'][0]
-        bbox2 = source_props['bbox'][1]
-        bbox3 = source_props['bbox'][2]
-        bbox4 = source_props['bbox'][3]
-
-        Maj = source_props['major_axis_length']
-        Min = source_props['minor_axis_length']
-        Pa = source_props['orientation']
-
-        params.append([source.name,
-                        source.Birth,
-                        source.Death,
-                        source.x1,
-                        source.y1,
-                        source.x2,
-                        source.y2,
-                        Flux_total,
-                        Flux_peak,
-                        Flux_correction_factor,
-                        Area,
-                        Xc,
-                        Yc,
-                        bbox1,
-                        bbox2,
-                        bbox3,
-                        bbox4,
-                        Maj,
-                        Min,
-                        Pa,
-                        source.parent_tag,
-                        source.Class,
-                        SNR,
-                        Noise])
-    
-    return create_params_df(cutup,params)
-    
-    
-    
 
 
 
@@ -213,7 +85,7 @@ def large_mask_red_image_procc_GPU(Birth,Death,x1,y1,image,X0,Y0):
     
     mask = cp.zeros(image.shape,dtype=cp.bool_)
     mask = cp.logical_or(mask,cp.logical_and(image <= Birth, image > Death))
-    #print(mask)
+    
     # mask_enclosed = self.get_enclosing_mask_gpu(y1,x1,mask)
     labeled_mask, num_features = cupy_label(mask)
     
@@ -273,6 +145,7 @@ def large_mask_red_image_procc_CPU(Birth,Death,x1,y1,image):
     
     # Check if the specified pixel is within the mask
     if 0 <= y1 < mask.shape[1] and 0 <= x1 < mask.shape[0]:
+        
         label_at_pixel = labeled_mask[x1, y1]
         
         if label_at_pixel != 0:
@@ -303,7 +176,7 @@ def large_mask_red_image_procc_CPU(Birth,Death,x1,y1,image):
     
     
     
-def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=None,output=None,cutupts=None):
+def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=None,output=None,cutupts=None, mode='Optical',header=None):
     '''
     
     Characterising the Source Assuming the input image of of the format of a optical astronomical image.
@@ -312,6 +185,10 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
     # work on the whole image.
 
     '''
+    
+    if mode == 'Radio':
+        print('Radio mode selected')
+        Beam, BMAJ, BMIN, BPA = utils.calculate_beam(header=header)
     
     if use_gpu:
         
@@ -322,19 +199,12 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
         except:
         
             raise ImportError('cupy not installed. GPU acceleration not possible.')
-        
+    
     image = cutout
-
-    cutouts_gpu = []
     if use_gpu:
         image_gpu = cp.asarray(image, dtype=cp.float64)
-        for i in range(len(cutupts)):
-            cutouts_gpu.append(cp.asarray(cutupts[i], dtype=cp.float64))
+       
         
-    x1 = catalogue['x1'].to_numpy()
-    y1 = catalogue['y1'].to_numpy()
-    x2 = catalogue['x2'].to_numpy()
-    y2 = catalogue['y2'].to_numpy()
     Birth = catalogue['Birth'].to_numpy()
     Death = catalogue['Death'].to_numpy()
     parent_tag = catalogue['parent_tag'].to_numpy()
@@ -342,78 +212,173 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
     bg = catalogue['bg'].to_numpy()
     X0 = catalogue['X0_cutout'].to_numpy()
     Y0 = catalogue['Y0_cutout'].to_numpy()
-    num = catalogue['cutup_number'].to_numpy()
-    # map X0 and Y0 to the cutout number
-    # pair up X0 and Y0
-    #print(num)
-    #print(len(num))
-    #print(len(bg))
-    #print(len(catalogue))
-    #print(len(Birth))
-    #print(len(X0))
-    #print(len(Y0))
+    mean_bg = catalogue['mean_bg'].to_numpy()
+    enclosed_i = catalogue['enclosed_i'].to_numpy()
+    IDs = catalogue['ID'].to_numpy()
+    Edge_flags = catalogue['edge_flag'].to_numpy()      
+    bbox1_og = catalogue['bbox1'].to_list()
+    bbox2_og = catalogue['bbox2'].to_list() 
+    bbox3_og = catalogue['bbox3'].to_list()
+    bbox4_og = catalogue['bbox4'].to_list()
     
+    x1 = catalogue['x1'].to_numpy() #- 1 #- X0 
+    y1 = catalogue['y1'].to_numpy() #- 1#- X0 
+    x2 = catalogue['x2'].to_numpy() #- 1#- Y0 
+    y2 = catalogue['y2'].to_numpy() #- 1#- X0
+    
+    
+    # map X0 and Y0 to the cutout number
     params = []
     polygons = []
-
+    
+    import matplotlib.pylab as plt
 
     for i, source in tqdm(enumerate(Birth),total=len(Birth),desc='Calculating Source Properties..',disable=not output):
-        
+    
         if use_gpu == True:
             
-            red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_GPU(Birth[i],Death[i],x1[i],y1[i],cutouts_gpu[num[i]],X0[i],Y0[i])
+            cropped_image_gpu = image_gpu[bbox1_og[i]-1:bbox3_og[i]+1,bbox2_og[i]-1:bbox4_og[i]+1]
+            
+            try:
+                red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_GPU(Birth[i],Death[i],
+                                                                                        x1[i]-bbox1_og[i]+1,
+                                                                                        y1[i]-bbox2_og[i]+1,
+                                                                                        cropped_image_gpu,
+                                                                                        X0[i],Y0[i])
+            except:
+                
+                print('Error in GPU processing!')
+                print('Source ID: ',IDs[i])
+                print('x1:',x1[i]-bbox1_og[i]+1)
+                print('y1:',y1[i]-bbox2_og[i]+1)
+                print('Birth:',Birth[i])
+                print('Death:',Death[i])
+                #print('Cropped_image',cropped_image_gpu.get())
+                
             red_mask = red_mask.astype(int)
             
             red_image = red_image.get()
             red_mask = red_mask.get()
-            xmin = xmin.get()
-            xmax = xmax.get()
-            ymin = ymin.get()
-            ymax = ymax.get()
+            xmin = xmin.get() + bbox2_og[i]
+            xmax = xmax.get() + bbox2_og[i] 
+            ymin = ymin.get() + bbox1_og[i]
+            ymax = ymax.get() + bbox1_og[i]
         
         else:
-            red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_CPU(Birth[i],Death[i],int(x1[i]),int(y1[i]),image)
+            cropped_image = image[bbox1_og[i]-1:bbox3_og[i]+1,bbox2_og[i]-1:bbox4_og[i]+1]
+            try:
+                red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_CPU(Birth[i],
+                                                                                            Death[i],
+                                                                                            int(x1[i])-int(bbox1_og[i])+1,
+                                                                                            int(y1[i])-int(bbox2_og[i])+1,
+                                                                                            cropped_image)
+            except:
+                print("Error in CPU processing!")
+                print('Source ID: ',IDs[i])
+                print('x1:',x1[i]-bbox1_og[i]+1)
+                print('y1:',y1[i]-bbox2_og[i]+1)
+                print('Birth:',Birth[i])
+                print('Death:',Death[i])
+                
             red_mask = red_mask.astype(int)
-        
+
+            xmin = xmin + bbox2_og[i]
+            xmax = xmax + bbox2_og[i]
+            ymin = ymin + bbox1_og[i]
+            ymax = ymax + bbox1_og[i]
+            
         #print(red_mask)
-        contour = utils._get_polygons_in_bbox(xmin,xmax,ymin,ymax,x1[i],y1[i],Birth[i],Death[i],red_mask,X0[i],Y0[i])
-        
+        contour = utils._get_polygons_in_bbox(xmin,xmax,ymin,ymax,x1[i],y1[i],Birth[i],Death[i],red_mask,0,0)
         source_props = utils.get_region_props(red_mask,image=red_image)
         source_props = utils.props_to_dict(source_props[0])
         #print(background_map)
         background_map = bg[i]
+        #print('Mean bg',mean_bg)
+        mean_bg_s = mean_bg[i]
+        
+        background_map = np.random.normal(mean_bg_s,background_map,red_mask.shape)
+        
         red_background_mask = np.where(red_mask == 0, np.nan, red_mask*background_map)
-        Noise = np.nanmean(red_background_mask)
-        Flux_total = np.nansum(red_mask*red_image - red_background_mask)
-        Area = source_props['area']
-        SNR = Flux_total/Noise
         
-        Xc = source_props['centroid'][1] + xmin
-        Yc = source_props['centroid'][0] + ymin
+        Noise = np.sum(red_background_mask) 
+        peak_coords = np.where(red_image == source_props['max_intensity'])
+
+        y_peak_loc = peak_coords[0][0]
+        x_peak_loc = peak_coords[1][0]
         
-        
-        # Edge of its cutout flag.
-        Edge_flag = 0
-        # if any of the points in the contour are on the edge of the cutout then set the flag to 1. Not working??
-        for point in contour:
-            if point[0] - Y0[i] == 0 or point[0] - Y0[i] == cutout.shape[0] or point[1] - X0[i] == 0 or point[1] - X0[i] == cutout.shape[1]:
-                Edge_flag = 1
-                break
+        if mode == 'Radio':
+            shape = red_image.shape
+            # if shape is smaller than 100 in any direction then we add padding evenly to each side.
+            if shape[0] < 100:
+                pad = int((100 - shape[0])/2)
+                red_image = np.pad(red_image,((pad,pad),(0,0)),mode='constant',constant_values=0)
+                red_background_mask = np.pad(red_background_mask,((pad,pad),(0,0)),mode='constant',constant_values=0)
+                red_mask = np.pad(red_mask,((pad,pad),(0,0)),mode='constant',constant_values=0)
+                shape = red_image.shape
+                x = y_peak_loc + pad
+                
+            else:
+                x = y_peak_loc
+                y = x_peak_loc
+                
+            if shape[1] < 100:
+                pad = int((100 - shape[1])/2)
+                red_image = np.pad(red_image,((0,0),(pad,pad)),mode='constant',constant_values=0)
+                red_background_mask = np.pad(red_background_mask,((0,0),(pad,pad)),mode='constant',constant_values=0)
+                red_mask = np.pad(red_mask,((0,0),(pad,pad)),mode='constant',constant_values=0)
+                shape = red_image.shape
+                y = x_peak_loc + pad
             
-        Xc = Xc + X0[i]
-        Yc = Yc + Y0[i]
-        bbox1 = source_props['bbox'][0] + X0[i] + xmin
-        bbox2 = source_props['bbox'][1] + Y0[i] + ymin
-        bbox3 = source_props['bbox'][2] + X0[i] + xmin
-        bbox4 = source_props['bbox'][3] + Y0[i] + ymin
+            else:
+                x = y_peak_loc
+                y = x_peak_loc
+                
+           # print(shape)
+            
+            Model_Beam = utils.model_beam_func(source_props['max_intensity'],shape,
+                                        x,y,BMAJ/2,
+                                        BMIN/2,BPA)
         
-        Maj = source_props['major_axis_length']
+            Flux_total = np.nansum(red_mask*red_image - red_background_mask)/Beam
+            Flux_peak = np.nanmax(red_mask*red_image) - red_background_mask[y_peak_loc,x_peak_loc]        
+
+            Flux_correction_factor = utils.flux_correction_factor(red_mask, Model_Beam)
+            Flux_total = Flux_total*Flux_correction_factor
+            
+            # remove the 1pixel padding
+            padding = 1
+            
+        else:
+            
+            Flux_total = np.nansum(red_mask*red_image - red_background_mask)
+            Flux_peak = np.nanmax(red_mask*red_image) - red_background_mask[y_peak_loc,x_peak_loc]
+            Flux_correction_factor = np.nan
+            padding = 0
+            
+        Area = source_props['area']
+        
+        SNR = Flux_total/(Area*bg[i])
+        
+        Noise = np.std(red_background_mask)
+        
+        Xc = source_props['centroid'][1] + xmin - padding
+        Yc = source_props['centroid'][0] + ymin - padding
+        
+            
+        Xc = Xc #+ X0[i]
+        Yc = Yc #+ Y0[i]
+        bbox1 = source_props['bbox'][0] + xmin - padding
+        bbox2 = source_props['bbox'][1] + ymin - padding
+        bbox3 = source_props['bbox'][2] + xmin - padding
+        bbox4 = source_props['bbox'][3] + ymin - padding
+        
+        Maj = source_props['major_axis_length'] 
         Min = source_props['minor_axis_length']
         Pa = source_props['orientation']
         
-        if Edge_flag != 1:
+        if Edge_flags[i] != 1:
         
-            params.append([i,
+            params.append([IDs[i],
                             Birth[i],
                             Death[i],
                             x1[i],
@@ -421,8 +386,8 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
                             x2[i],
                             y2[i],
                             Flux_total,
-                            Flux_total,
-                            1,
+                            Flux_peak, # this should be the peak flux.
+                            Flux_correction_factor,
                             Area,
                             Xc,
                             Yc,
@@ -439,10 +404,19 @@ def optical_characteristing(use_gpu,catalogue=None,cutout=None,background_map=No
                             Noise,
                             X0[i],
                             Y0[i],
-                            Edge_flag])
-             
+                            mean_bg_s,
+                            Edge_flags[i],
+                            contour,
+                            enclosed_i[i]])
+        
             polygons.append(contour)
-    #print(params)
-    #print(len(params[0]))
+        #except:
+        #    print('Error in optical characteristing!')
+        #    print('Source ID: ',IDs[i])
+        #    print('Skipping source...')
+        #    continue
+        #print(params)
+        #print(len(params[0]))
+    
     return create_params_df(False,params), polygons
 

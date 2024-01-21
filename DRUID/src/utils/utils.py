@@ -153,8 +153,9 @@ def remove_duplicates(catalogue):
     
     """
     # sort by area
-    catalogue = catalogue.sort_values(by=['area'],ascending=False)
-    catalogue = catalogue.drop_duplicates(subset=['Birth','Death'])
+    catalogue = catalogue.sort_values(by=['distance_from_center'],ascending=False)
+    catalogue = catalogue.drop_duplicates(subset=['x1','y1','Birth','Class'],keep='first')
+    # sort by ID
     # sort by ID
     # choose the row with the highest area
     
@@ -231,8 +232,9 @@ def calculate_beam(header : fits.header.Header):
 
 
 
-
-
+def check_edge(mask):
+    
+    return 1 in mask[0, :] or 1 in mask[-1, :] or 1 in mask[:, 0] or 1 in mask[:, -1]
 
 
 
@@ -268,8 +270,38 @@ def props_to_dict(regionprops):
     
 
 
+def bounding_box_cpu(mask):
+    # Get the indices of elements that are True
+    rows, cols = np.where(mask)
+    # Get the minimum and maximum x and y coordinates
+    min_y, max_y = np.min(rows), np.max(rows)
+    min_x, max_x = np.min(cols), np.max(cols)
+    # Return the bounding box as a tuple of tuples
+    return min_y, min_x, max_y, max_x
 
 
+
+def bounding_box_gpu(binary_mask_gpu):
+    """
+    Calculate the bounding box of a binary mask using cupy.
+
+    Parameters:
+    - binary_mask_gpu: cupy array, binary mask.
+
+    Returns:
+    - tuple: (min_row, min_col, max_row, max_col), representing the bounding box.
+    """
+
+    # Get the indices of elements that are True
+    
+    rows, cols = cp.where(binary_mask_gpu)
+
+    # Get the minimum and maximum x and y coordinates
+    min_y, max_y = cp.min(rows), cp.max(rows)
+    min_x, max_x = cp.min(cols), cp.max(cols)
+
+    # Return the bounding box as a tuple of tuples
+    return min_y, min_x, max_y, max_x
 
 
 
@@ -380,7 +412,7 @@ def get_enclosing_mask_gpu(x, y, mask):
         if label_at_pixel != 0:
             # Extract the connected component containing the specified pixel
             component_mask = (labeled_mask == label_at_pixel)
-            return cp.asnumpy(component_mask)
+            return component_mask # still in GPU memory
         else:
             return None
     else:
@@ -391,7 +423,7 @@ def get_enclosing_mask_gpu(x, y, mask):
 
 
 
-def get_mask_CPU(row, img):
+def get_mask_CPU(x1,y1,Birth,Death, img):
     
     """Get mask for a single row uses the CPU
     
@@ -405,8 +437,8 @@ def get_mask_CPU(row, img):
     """
     
     mask = np.zeros(img.shape)
-    mask = np.logical_or(mask,np.logical_and(img <= row.Birth,img > row.Death))
-    mask_enclosed = get_enclosing_mask_CPU(int(row.y1),int(row.x1),mask)
+    mask = np.logical_or(mask,np.logical_and(img <= Birth,img > Death))  
+    mask_enclosed = get_enclosing_mask_CPU(int(y1),int(x1),mask)
     
     return mask_enclosed
 
@@ -441,7 +473,7 @@ def get_enclosing_mask_CPU(x, y, mask):
 
 
 
-def get_mask_GPU(Birth,Death,row,img):
+def get_mask_GPU(Birth,Death,x1,y1,img):
     
     """Gets mask for a single row using the GPU (requires cupy)
 
@@ -458,7 +490,7 @@ def get_mask_GPU(Birth,Death,row,img):
 
     mask = cp.zeros(img.shape,dtype=cp.float64)
     mask = cp.logical_or(mask,cp.logical_and(img <= Birth,img > Death))
-    mask_enclosed = get_enclosing_mask_gpu(int(row.y1),int(row.x1),mask)
+    mask_enclosed = get_enclosing_mask_gpu(int(y1),int(x1),mask)
     
     return mask_enclosed    
 
@@ -545,7 +577,13 @@ def xy_to_RaDec(x,y,header,mode):
             ra, dec, _, _ = wcs.all_pix2world(x, y, stokes, freq, 0)
             
         elif mode == 'optical':
-            # image is 2d so no stokes or freq
-            ra, dec = wcs.all_pix2world(x, y, 0)
-        
+            try:
+                # image is 2d so no stokes or freq
+                ra, dec = wcs.all_pix2world(x, y, 0)
+            except:
+                # try radio
+                stokes = 0
+                freq = 0
+                ra, dec, _, _ = wcs.all_pix2world(x, y, stokes, freq, 0)
+                
         return ra, dec
