@@ -8,3 +8,6 @@ astropy
 tqdm
 matplotlib
 setproctitle
+time
+scipy
+pdb
