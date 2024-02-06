@@ -3,11 +3,9 @@ pandas
 pytest
 numpy
 scikit-image
-cripser @ git+https://github.com/RhysAlfShaw/CubicalRipser_3dim
+cripser
 astropy
 tqdm
 matplotlib
 setproctitle
-time
 scipy
-pdb
