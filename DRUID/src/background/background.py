@@ -1,4 +1,5 @@
 """ 
+
 File: background.py
 Author: Rhys Shaw
 Date: 23/12/2023
@@ -54,6 +55,9 @@ def radio_background_map(cutout : np.ndarray, box_size : int):
         
     return bg_map, mean_bg_map
         
+        
+        
+        
     
 def calculate_background_map(image,box_size,mode='mad_std'):
     
@@ -85,11 +89,17 @@ def calculate_background_map(image,box_size,mode='mad_std'):
     return box_mean_bg, box_std_bg
             
     
+    
+    
+
 
 def get_bg_value_from_result_image(original_location_in_full_image, box_size, bg_map):
     i, j = original_location_in_full_image
     result_value = bg_map[i//box_size + 1, j//box_size + 1]
     return result_value
+
+
+
 
 
 
@@ -118,6 +128,9 @@ def calculate_background(image, mode='mad_std'):
     return local_bg, mean_bg
 
 
+        
+        
+        
         
         
 def radio_background(image : np.ndarray, metric : str ='mad_std'):
@@ -212,7 +225,4 @@ def optical_background(nsamples : int, image : np.ndarray):
         
         
         return mean_bg, std_bg
-
-
-
 

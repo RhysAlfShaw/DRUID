@@ -290,7 +290,6 @@ class sf:
         # time.sleep(3)
         enclosed_i_list = []
         t0 = time.time()
-        #import cupy as cp
         for i in tqdm(range(0,len(self.catalogue)),total=len(self.catalogue),desc='Calculating enclosed_i',disable=not self.output):
             row = self.catalogue.iloc[i]
             x1 = row.x1 - row.bbox1 + 1
@@ -319,8 +318,9 @@ class sf:
             # plt.close()       
             # # sleep
             # time.sleep(2)
+            
             if self.GPU==True:
-                
+                import cupy as cp
                 img_gpu = cp.asarray(img, dtype=cp.float64)
                 enclosed_i = homology.make_point_enclosure_assoc_GPU(0,x1,y1,Birth,Death,cat,img_gpu)
                 enclosed_i_list.append(enclosed_i)
