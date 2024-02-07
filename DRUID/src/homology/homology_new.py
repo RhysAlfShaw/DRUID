@@ -6,7 +6,6 @@ from ..utils import utils
 from ..background import background
 
 import time
-from functools import partial
 import pandas
 from tqdm import tqdm
 
