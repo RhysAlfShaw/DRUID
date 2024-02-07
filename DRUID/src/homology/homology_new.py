@@ -209,9 +209,11 @@ def correct_first_destruction(pd,output):
             new_row['enclosed_i'] = []
             
             
-            pd = pandas.concat((pd,new_row.to_frame().T), ignore_index=False)
+            pd = pd.append(new_row,ignore_index=True)
             
     return pd
+
+
 
 
 def calculate_area_GPU(Birth,Death,row, img_gpu):
@@ -346,6 +348,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
     
     pd['lifetimeFrac'] = pd['Birth']/pd['Death']
     pd = pd[pd['lifetimeFrac']>lifetime_limit_fraction]
+    pd = pd[pd['lifetime'] > lifetime_limit]
     pd.sort_values(by='lifetime',ascending=False,inplace=True,ignore_index=True)
     
     pd['ID'] = pd.index + IDoffset

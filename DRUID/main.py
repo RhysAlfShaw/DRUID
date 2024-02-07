@@ -36,8 +36,10 @@ from scipy import ndimage
 
 DRUID_MESSAGE = """   
               
+              
 #############################################
-_______   _______          _______  _______  
+
+_______   _______          _________ ______  
 (  __  \ (  ____ )|\     /|\__   __/(  __  \ 
 | (  \  )| (    )|| )   ( |   ) (   | (  \  )
 | |   ) || (____)|| |   | |   | |   | |   ) |
@@ -45,6 +47,7 @@ _______   _______          _______  _______
 | |   ) || (\ (   | |   | |   | |   | |   ) |
 | (__/  )| ) \ \__| (___) |___) (___| (__/  )
 (______/ |/   \__/(_______)\_______/(______/ 
+        
         
 #############################################
 
@@ -137,8 +140,7 @@ class sf:
                 
         self.nproc = nproc
         
-        if header is not None:
-            self.header = header
+        self.header = header
         
         if self.image_path is None:
             self.image = image
@@ -147,7 +149,7 @@ class sf:
             self.image, self.header = utils.open_image(self.image_path)
         
         if mode == 'Radio':
-            # add 1 pixel padding to all sides of the image
+            # add 1 pixel padding to all sides of the image this causes issues?
             self.image = np.pad(self.image,((1,1),(1,1)),mode='constant',constant_values=0)
             
         
@@ -263,6 +265,7 @@ class sf:
                                                         GPU=self.GPU,lifetime_limit_fraction=lifetime_limit_fraction,mean_bg=self.mean_bg,
                                                         IDoffset=IDoffset,box_size=self.cutup_size,detection_threshold=self.sigma)
             self.catalogue = catalogue
+            
             self.catalogue['Y0_cutout'] = 0
             self.catalogue['X0_cutout'] = 0
             
@@ -320,7 +323,7 @@ class sf:
             # # sleep
             # time.sleep(2)
             if self.GPU==True:
-                
+                # this is not the best way to deal with this. We should crop the gpu version of the image.
                 img_gpu = cp.asarray(img, dtype=cp.float64)
                 enclosed_i = homology.make_point_enclosure_assoc_GPU(0,x1,y1,Birth,Death,cat,img_gpu)
                 enclosed_i_list.append(enclosed_i)
@@ -334,17 +337,23 @@ class sf:
         # correct for first destruction
         
         print(len(self.catalogue))
-        
+        t0_correct_firs = time.time()
         self.catalogue = homology.correct_first_destruction(self.catalogue,output=not self.output)
-        
+        t1_correct_firs = time.time()
+        print('Time to correct first destruction: ',t1_correct_firs-t0_correct_firs)
     
         # parent tag
         print("Assigning parent tags..")
-        
+        t0_parent_tag = time.time()
         self.catalogue = homology.parent_tag_func_vectorized_new(self.catalogue)
+        t1_parent_tag = time.time()
+        print('Time to assign parent tags: ',t1_parent_tag-t0_parent_tag)
         #print(self.catalogue['parent_tag'].value_counts())
         print("Classifying sources in hirearchy..")
+        t0_classify = time.time()
         self.catalogue['Class'] = self.catalogue.apply(homology.classify_single,axis=1)
+        t1_classify = time.time()
+        print('Time to classify sources: ',t1_classify-t0_classify)
         # put ID at the front
         print(self.catalogue)
             
@@ -558,7 +567,42 @@ class sf:
         
         self._set_types_of_dataframe()
         
+        if self.mode == 'optical':
+                    
+            def ABmag(flux):
+                return -2.5*np.log10(flux)
+            
+            def RONoise(EFFRON,EFFGAIN,EXPTIME,Area):
+                return np.sqrt(Area)*(EFFRON/EFFGAIN)*EXPTIME
 
+            def SkyNoise(sky):
+                return np.sqrt(sky)
+
+            def SourceNoise(Flux):
+                return np.sqrt(Flux)
+
+            def Flux_err(EFFRON,EFFGAIN,EXPTIME,Area,sky,Flux):
+                return np.sqrt(RONoise(EFFRON,EFFGAIN,EXPTIME,Area)**2 + SkyNoise(sky) + SourceNoise(Flux))
+
+            def NOISE(row,local_ng):
+                return np.sum(np.random.normal(row['mean_bg'],local_ng,int(row['Area'])))
+            
+            EFFGAIN = utils.get_EFFGAIN(self.header)
+            EXPTIME = utils.get_EXPTIME(self.header)
+            EFFRON = utils.get_EFFRON(self.header)
+            print('EFFGAIN: ',EFFGAIN)
+            print('EXPTIME: ',EXPTIME)
+            print('EFFRON: ',EFFRON)
+            print(self.catalogue['Noise'])
+            self.catalogue['Flux_total_new'] = (self.catalogue['Flux_total']*EFFGAIN*EXPTIME - self.catalogue['Noise']*EFFGAIN*EXPTIME - RONoise(EFFRON,EFFGAIN,EXPTIME,self.catalogue['Area']))
+            print('Flux_total_new: ',self.catalogue['Flux_total_new'])
+            self.catalogue['Flux_total_err'] = Flux_err(EFFRON,EFFGAIN,EXPTIME,self.catalogue['Area'],self.catalogue['Noise']*EFFGAIN*EXPTIME,self.catalogue['Flux_total_new'])
+            print('Flux_total_err: ',self.catalogue['Flux_total_err'])
+            self.catalogue['SNR'] = self.catalogue['Flux_total_new']/self.catalogue['Flux_total_err']/self.catalogue['Area']
+            print('SNR: ',self.catalogue['SNR'])
+            self.catalogue['MAG_err'] = 1/self.catalogue['SNR'] # use the approximate error for the magnitude.
+            self.catalogue['Flux_total_new'] = self.catalogue['Flux_total_new']/(EFFGAIN*EXPTIME)
+            self.catalogue['MAG_flux'] = ABmag(self.catalogue['Flux_total_new'])
 
 
 

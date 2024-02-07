@@ -64,7 +64,62 @@ def open_image(PATH : str):
 
 
 
+def get_psf_FWHM(header : fits.header.Header):
+    """Return the psf FWHM in pixels.
 
+    Args:
+        header (fits.header.Header): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    psf_FWHM_arcsec = header['PSF_FWHM']
+    ## convert to pixels assumes square pixels and uniform pixel scale
+    arcseconds_per_pixel = abs(header['CD1_1'])*3600*-1
+    psf_FWHM_pixels = psf_FWHM_arcsec/arcseconds_per_pixel
+    
+    return psf_FWHM_pixels
+
+
+def get_EFFGAIN(header : fits.header.Header):
+    """Return the effective gain of the image.
+
+    Args:
+        header (fits.header.Header): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    EFFGAIN = header['EFFGAIN']
+    
+    return EFFGAIN
+
+
+def get_EFFRON(header : fits.header.Header):
+    """Return the effective read noise of the image.
+
+    Args:
+        header (fits.header.Header): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    EFFRON = header['EFFRON']
+    
+    return EFFRON
+
+def get_EXPTIME(header : fits.header.Header):
+    """Return the exposure time of the image.
+
+    Args:
+        header (fits.header.Header): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    EXPTIME = header['EXPTIME']
+    
+    return EXPTIME
 
 
 

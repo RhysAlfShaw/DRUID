@@ -14,7 +14,7 @@ import numpy as np
 from tqdm import tqdm
 from scipy.ndimage import label
 import pdb
-
+from scipy.ndimage import binary_dilation
 try:
     import cupy as cp
     from cupyx.scipy.ndimage import label as cupy_label
@@ -169,14 +169,49 @@ def large_mask_red_image_procc_CPU(Birth,Death,x1,y1,image):
             
             return red_image, red_mask, xmin, xmax, ymin, ymax
 
+import cv2
+import numpy as np
+
+def dilate_mask_circular(mask, radius):
+    # Create a circular structuring element using cv2.getStructuringElement
+    circular_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*radius+1, 2*radius+1))
+
+    # Perform dilation using cv2.dilate
+    dilated_mask = cv2.dilate(mask.astype(np.uint8), circular_kernel)
+
+    return dilated_mask
     
 
+def curve_of_growth_dilation(mask,image):
+    converged = False
+    i = 0
+    dilated_mask = np.zeros(image.shape, dtype=bool)
+    mask_before = mask
+    while converged == False:
+        if i == 50:
+            #print('max iterations reached')
+            return dilated_mask.astype(int)
+       # print(i)
+        i += 1
+        
+        dilated_mask = dilate_mask_circular(mask_before,1)
 
+        # check if the mask has converged
+        flux = np.sum(image*dilated_mask)
+        flux_old = np.sum(image*mask_before)
+        diff = (flux - flux_old)
+        #print(diff)
+        if diff<0:
+            converged = True
+            dilated_mask = mask_before
+            
+        else:
+            mask_before = dilated_mask
+    #print('converged {}'.format(i))
+    return dilated_mask.astype(int)
 
     
-    
-    
-def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=None,output=None,cutupts=None, mode='Optical',header=None):
+def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=None,output=None,cutupts=None, mode='optical',header=None):
     '''
     
     Characterising the Source Assuming the input image of of the format of a optical astronomical image.
@@ -185,10 +220,19 @@ def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=
     # work on the whole image.
 
     '''
-    
+    if header == None:
+        mode = 'other'
+        
     if mode == 'Radio':
         print('Radio mode selected')
         Beam, BMAJ, BMIN, BPA = utils.calculate_beam(header=header)
+        
+    if mode == 'optical':
+        print('Optical mode selected, modeling the PSF as a gaussian.')
+        psf_fwhm_p = utils.get_psf_FWHM(header)
+        #EFFRON = utils.get_EFFRON(header)
+        #EFFGAIN = utils.get_EFFGAIN(header)
+        #EXPTIME = utils.get_EXPTIME(header)
     
     if use_gpu:
         
@@ -287,7 +331,60 @@ def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=
             ymin = ymin + bbox1_og[i]
             ymax = ymax + bbox1_og[i]
             
+        # DILATION TEST Not Working.
         #print(red_mask)
+        
+        # #try:
+        # if Class[i] == 0:
+        #     if xmin > 50 and ymin > 50:
+        #         expanx = 50
+        #         expany = 50
+        #         # increase mask and image size by 100 pixels in each direction.
+        #         # this is to ensure that the mask is large enough to capture the entire source.
+        #         # if the source is less than 50px away from the image edge then we padd with the distance to the edge -1
+        #         red_mask = np.pad(red_mask,pad_width=((expanx,expanx-1),(expany,expany-1)),mode='constant',constant_values=0)
+        #                         #,((expanx,expanx),(expany,expany)),mode='constant',constant_values=0)
+        #         #plt.imshow(red_mask)
+        #         #plt.savefig('red_mask.png')
+        #         red_mask = red_mask#[0:-1,0:-1]
+        #         #print('red_mask shape',red_mask.shape)
+        #         red_image = image[ymin-expanx:ymax+expanx,xmin-expany:xmax+expany]
+        #         #c
+        #         plt.figure(figsize=(10,10))
+        #         plt.imshow(red_image,cmap='gray',origin='lower',vmin=1E-12,vmax=1E-10)
+        #         plt.contour(red_mask)
+        #         plt.savefig('red_image.png')
+                
+                
+        #         #print('red_image shape',red_image.shape)
+        #         # dilate the mask until the flux converges.
+        #         # check that the shapes are the same
+        #         if red_mask.shape != red_image.shape:
+        #             print('red_mask and red_image shapes are not the same.')
+        #             print('Skipping source...')
+        #             continue
+        #         red_mask = curve_of_growth_dilation(red_mask,red_image)
+        #         plt.figure(figsize=(10,10))
+        #         plt.imshow(red_image,cmap='gray',origin='lower',vmin=1E-12,vmax=1E-10)
+        #         plt.contour(red_mask)
+        #         plt.savefig('red_image_after.png')
+                
+        #         pdb.set_trace()
+                
+        #         #print('red_mask shape',red_mask.shape)
+        #         # reduce the mask and recalculate the boundig box.
+        #         # plt.imshow(red_mask)
+        #         # plt.savefig('red_mask.png')
+        #         xminn,yminn,xmaxn,ymaxn = utils.bounding_box_cpu(red_mask)
+        #         xmax = xmaxn - expany + xmax
+        #         xmin = xminn - expany + xmin
+        #         ymin = yminn - expanx + ymin
+        #         ymax = ymaxn - expanx  + ymax
+        #         red_mask = red_mask[yminn:ymaxn,xminn:xmaxn]
+        #         red_image = red_image[yminn:ymaxn,xminn:xmaxn]
+                
+
+    
         contour = utils._get_polygons_in_bbox(xmin,xmax,ymin,ymax,x1[i],y1[i],Birth[i],Death[i],red_mask,0,0)
         source_props = utils.get_region_props(red_mask,image=red_image)
         source_props = utils.props_to_dict(source_props[0])
@@ -300,13 +397,22 @@ def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=
         
         red_background_mask = np.where(red_mask == 0, np.nan, red_mask*background_map)
         
-        Noise = np.sum(red_background_mask) 
+        Noise = abs(np.nansum(red_background_mask))
+        print('Noise',Noise)
         peak_coords = np.where(red_image == source_props['max_intensity'])
 
         y_peak_loc = peak_coords[0][0]
         x_peak_loc = peak_coords[1][0]
+        #print('x_peak_loc',x_peak_loc)
+        #print('y_peak_loc',y_peak_loc)
+        shape = red_image.shape
         
-        if mode == 'Radio':
+        Area = source_props['area']
+        #print('Class',Class[i])
+        
+            
+        
+        if mode == 'Radio' or mode == 'optical':
             shape = red_image.shape
             # if shape is smaller than 100 in any direction then we add padding evenly to each side.
             if shape[0] < 100:
@@ -315,7 +421,7 @@ def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=
                 red_background_mask = np.pad(red_background_mask,((pad,pad),(0,0)),mode='constant',constant_values=0)
                 red_mask = np.pad(red_mask,((pad,pad),(0,0)),mode='constant',constant_values=0)
                 shape = red_image.shape
-                x = y_peak_loc + pad
+                y = y_peak_loc + pad
                 
             else:
                 x = y_peak_loc
@@ -327,26 +433,59 @@ def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=
                 red_background_mask = np.pad(red_background_mask,((0,0),(pad,pad)),mode='constant',constant_values=0)
                 red_mask = np.pad(red_mask,((0,0),(pad,pad)),mode='constant',constant_values=0)
                 shape = red_image.shape
-                y = x_peak_loc + pad
+                x = x_peak_loc + pad
             
             else:
                 x = y_peak_loc
                 y = x_peak_loc
                 
            # print(shape)
+
+            if mode == 'optical':
+                
+                MAJ = psf_fwhm_p/2.355 # maybe use full expression in future. 
+                MIN = MAJ
+                BPA = 0 
+                        
+                Model_Beam = utils.model_beam_func(source_props['max_intensity'],shape,
+                                                                           x,y,MAJ,
+                                                                            MIN,BPA)
+                #plt.figure(figsize=(10,10))
+                #plt.imshow(Model_Beam)
+                #plt.scatter(x,y,color='red',marker='x',s=10)    
+                # plot the contour of the red_mask
+                #plt.contour(red_mask)
+                #plt.savefig('Model_Beam_test.png')
+                #pdb.set_trace()
+                
+            else:
+                BMAJ = BMAJ
+                BMIN = BMIN
             
-            Model_Beam = utils.model_beam_func(source_props['max_intensity'],shape,
-                                        x,y,BMAJ/2,
-                                        BMIN/2,BPA)
-        
-            Flux_total = np.nansum(red_mask*red_image - red_background_mask)/Beam
+                Model_Beam = utils.model_beam_func(source_props['max_intensity'],shape,
+                                                                           x,y,BMAJ/2,
+                                                                            BMIN/2,BPA)
+                
+                
+            if mode == 'Radio':
+                Flux_total = np.nansum(red_mask*red_image - red_background_mask)/Beam
+            else:
+            
+                Flux_total = np.nansum(red_mask*red_image - red_background_mask)
+                
             Flux_peak = np.nanmax(red_mask*red_image) - red_background_mask[y_peak_loc,x_peak_loc]        
 
             Flux_correction_factor = utils.flux_correction_factor(red_mask, Model_Beam)
-            Flux_total = Flux_total*Flux_correction_factor
+            
+            if Area < 100:
+                # we assume that the flux cannot be corrected
+                Flux_total = Flux_total*Flux_correction_factor
             
             # remove the 1pixel padding
-            padding = 1
+            if mode == 'Radio':
+                padding = 1
+            else:
+                padding = 0
             
         else:
             
@@ -355,11 +494,12 @@ def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=
             Flux_correction_factor = np.nan
             padding = 0
             
-        Area = source_props['area']
+            # add some estimation of the PSF. To account for the loss of flux due to the PSF cutting at low SNR.
+
         
         SNR = Flux_total/(Area*bg[i])
         
-        Noise = np.std(red_background_mask)
+       # Noise = np.std(red_background_mask)
         
         Xc = source_props['centroid'][1] + xmin - padding
         Yc = source_props['centroid'][0] + ymin - padding

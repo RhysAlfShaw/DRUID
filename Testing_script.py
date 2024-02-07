@@ -4,7 +4,7 @@ from matplotlib import colors
 import time
 
 PATH_image = '/data/typhon2/Rhys/data/KiDS/ADP.2019-02-11T13:02:26.713.fits'
-save_path = '/home/rs17612/DPS_Comparison/'
+#save_path = '/home/rs17612/DPS_Comparison/'
 
 hdullist = fits.open(PATH_image)
 image = hdullist[0].data
