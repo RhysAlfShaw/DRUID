@@ -7,7 +7,15 @@ test_gpu.png
 *.fits
 *.o
 *.O 
+*.0
 *.out
 *.OUTPUT
+*.output
 *.png
 *.pdf
+*.h5
+*.txt
+bench_script.sh
+codeDiagram.drawio
+Lockman_facets_process.sh
+DRUID.ouput
