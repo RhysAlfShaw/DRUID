@@ -14,7 +14,6 @@ test_gpu.png
 *.png
 *.pdf
 *.h5
-*.txt
 bench_script.sh
 codeDiagram.drawio
 Lockman_facets_process.sh

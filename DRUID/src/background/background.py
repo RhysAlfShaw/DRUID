@@ -58,6 +58,7 @@ def radio_background_map(cutout : np.ndarray, box_size : int):
         
         
         
+        
     
 def calculate_background_map(image,box_size,mode='mad_std'):
     
@@ -66,13 +67,13 @@ def calculate_background_map(image,box_size,mode='mad_std'):
     # then upsample the map to the original image size.
     
     image_height, image_width = len(image), len(image[0])
-    print('Image size: {},{}'.format(image_height,image_width))
-    print('Number of Pixels in Image: {}'.format(image_height*image_width))
+    #print('Image size: {},{}'.format(image_height,image_width))
+    #print('Number of Pixels in Image: {}'.format(image_height*image_width))
     box_sum = 0
     box_mean_bg = np.zeros((image_height//box_size + 1, image_width//box_size + 1))
     box_std_bg = np.zeros((image_height//box_size + 1, image_width//box_size + 1))
     # estimate the dimensions of the background map
-    print('Number of boxes to calculate: ', (image_height//box_size + 1) * (image_width//box_size + 1))
+    #print('Number of boxes to calculate: ', (image_height//box_size + 1) * (image_width//box_size + 1))
     for i in range(image_height//box_size + 1):
         #print(i)
         for j in range(image_width//box_size + 1):

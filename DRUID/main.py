@@ -103,7 +103,7 @@ class sf:
             ValueError: _description_
         """
         # start up message!
-        print(DRUID_MESSAGE)
+        #print(DRUID_MESSAGE)
 
 
         self.cutup = cutup
@@ -125,17 +125,17 @@ class sf:
                 from cupyx.scipy.ndimage import label as cp_label
                 
                 num_gpus = cp.cuda.runtime.getDeviceCount()
-                print(f'Found {num_gpus} GPUs')
+                #print(f'Found {num_gpus} GPUs')
                 
                 if num_gpus > 0:
-                    print('GPUs are avalible, GPU functions will now be avalible.')
+                    #print('GPUs are avalible, GPU functions will now be avalible.')
                     GPU_AVALIBLE = True
                 else:
-                    print('No GPUs avalible, using CPU')
+                    #print('No GPUs avalible, using CPU')
                     GPU_AVALIBLE = False
             except:
                 
-                print('Could not import cupy. DRUID GPU functions will not be avalible')
+                #print('Could not import cupy. DRUID GPU functions will not be avalible')
                 GPU_AVALIBLE = False
                 
         self.nproc = nproc
@@ -155,7 +155,7 @@ class sf:
         
         if self.smooth_sigma !=0:
             self.image = utils.smoothing(self.image,self.smooth_sigma)
-            print('Image smoothed with sigma = {}'.format(self.smooth_sigma))
+            #print('Image smoothed with sigma = {}'.format(self.smooth_sigma))
             
         self.mode = mode
         # check if the mode is valid
@@ -172,7 +172,7 @@ class sf:
         
         if self.cutup:
             self.cutup_size = cutup_size
-            print('Cutting up image {}x{} into {}x{} cutouts'.format(self.image.shape[0],self.image.shape[1],cutup_size,cutup_size))
+            #print('Cutting up image {}x{} into {}x{} cutouts'.format(self.image.shape[0],self.image.shape[1],cutup_size,cutup_size))
             if self.cutup_buff is not None:
                 self.cutouts, self.coords = utils.cut_image_buff(self.image,cutup_size, buffer_size=self.cutup_buff)
             else:
@@ -222,9 +222,9 @@ class sf:
             
             catalogue_list = []
             IDoffset = 0
-            for i, cutout in enumerate(tqdm(self.cutouts)):
+            for i, cutout in enumerate(tqdm(self.cutouts),disable=True):
                 
-                print("Computing for Cutout number :{}/{}".format(i+1, len(self.cutouts)))
+                #print("Computing for Cutout number :{}/{}".format(i+1, len(self.cutouts)))
                 
                 catalogue = homology.compute_ph_components(cutout,self.local_bg,analysis_threshold_val=self.analysis_threshold_val,
                                                         lifetime_limit=lifetime_limit,output=self.output,bg_map=self.bg_map,area_limit=self.area_limit,
@@ -331,31 +331,31 @@ class sf:
                 enclosed_i = homology.make_point_enclosure_assoc_CPU(0,x1,y1,Birth,Death,cat,img)
                 enclosed_i_list.append(enclosed_i)
                 
-        print('enclosed_i calculated! t='+str(time.time()-t0)+' s')
+        #print('enclosed_i calculated! t='+str(time.time()-t0)+' s')
         self.catalogue['enclosed_i'] = enclosed_i_list
         
         # correct for first destruction
         
-        print(len(self.catalogue))
+        #print(len(self.catalogue))
         t0_correct_firs = time.time()
         self.catalogue = homology.correct_first_destruction(self.catalogue,output=not self.output)
         t1_correct_firs = time.time()
-        print('Time to correct first destruction: ',t1_correct_firs-t0_correct_firs)
+        #print('Time to correct first destruction: ',t1_correct_firs-t0_correct_firs)
     
         # parent tag
-        print("Assigning parent tags..")
+        #print("Assigning parent tags..")
         t0_parent_tag = time.time()
         self.catalogue = homology.parent_tag_func_vectorized_new(self.catalogue)
         t1_parent_tag = time.time()
-        print('Time to assign parent tags: ',t1_parent_tag-t0_parent_tag)
+        #print('Time to assign parent tags: ',t1_parent_tag-t0_parent_tag)
         #print(self.catalogue['parent_tag'].value_counts())
-        print("Classifying sources in hirearchy..")
+        #print("Classifying sources in hirearchy..")
         t0_classify = time.time()
         self.catalogue['Class'] = self.catalogue.apply(homology.classify_single,axis=1)
         t1_classify = time.time()
-        print('Time to classify sources: ',t1_classify-t0_classify)
+        #print('Time to classify sources: ',t1_classify-t0_classify)
         # put ID at the front
-        print(self.catalogue)
+       
             
             
             
@@ -364,7 +364,7 @@ class sf:
     def set_background(self,detection_threshold,analysis_threshold,
                        set_bg=None,bg_map_bool=False,box_size=None,mode='mad_std'):
         
-        print('Setting background..')
+        #print('Setting background..')
         
         
         self.sigma = detection_threshold
@@ -399,26 +399,26 @@ class sf:
                     pass
         self.box_size = box_size
         if bg_map_bool == True:
-            print('Creating a background map. Inputed Box size = ',box_size)
+            #print('Creating a background map. Inputed Box size = ',box_size)
             # these will be returned as arrays like a map.
             std, mean_bg = background.calculate_background_map(self.image,box_size,mode=mode)
-            print('Background map created.')
-            print('Mean Background across cutouts: ', np.nanmean(std))
-            print('Median of bg distribution: ', np.nanmean(mean_bg))
+            #print('Background map created.')
+            #print('Mean Background across cutouts: ', np.nanmean(std))
+            #print('Median of bg distribution: ', np.nanmean(mean_bg))
             
         else:
-            print('Not creating a background map.')
+            #print('Not creating a background map.')
             std, mean_bg = background.calculate_background(self.image,mode=mode)
-            print('Background set to: ',std)
-            print('Background mean set to: ',mean_bg)
+            #print('Background set to: ',std)
+            #print('Background mean set to: ',mean_bg)
             
         if set_bg is not None:
             # set bg should be a tuple of (std,mean_bg)
-            print('User has set the background.')
+            #print('User has set the background.')
             std = set_bg[0]
             mean_bg = set_bg[1]
-            print('Background set to: ',std)
-            print('Background mean set to: ',mean_bg)
+            #print('Background set to: ',std)
+            #print('Background mean set to: ',mean_bg)
         
         
         self.local_bg = std*self.sigma
@@ -500,24 +500,24 @@ class sf:
             # If the user has a custom background function, they can pass it in here.
             local_bg = set_bg*self.sigma
             analysis_threshold = local_bg*self.analysis_threshold
-            print('Background set to: ',local_bg)
-            print('Analysis threshold set to: ',analysis_threshold)
+            #print('Background set to: ',local_bg)
+            #print('Analysis threshold set to: ',analysis_threshold)
             
         self.analysis_threshold_val = analysis_threshold
         self.local_bg = local_bg
         self.mean_bg = mean_bg
-        print(self.mean_bg)
+        #print(self.mean_bg)
         
-        if bg_map:
-            print('Using bg_map for analysis.')
-        else:
-            if self.cutup:
+        #if bg_map:
+            #print('Using bg_map for analysis.')
+        #else:
+            #if self.cutup:
             
-                print('Mean Background across cutouts: ', np.nanmean(self.local_bg))
-                print('Median of bg distribution: ', np.nanmean(self.mean_bg))
+             #   print('Mean Background across cutouts: ', np.nanmean(self.local_bg))
+             #   print('Median of bg distribution: ', np.nanmean(self.mean_bg))
             
-            else:
-                print('Background set to: ',self.local_bg)
+           # else:
+              #  print('Background set to: ',self.local_bg)
 
 
 
@@ -556,7 +556,7 @@ class sf:
 
         if self.header is not None:
             #try:
-            print('Converting Xc and Yc to RA and DEC')
+            #print('Converting Xc and Yc to RA and DEC')
             Ra, Dec = utils.xy_to_RaDec(self.catalogue['Xc'],self.catalogue['Yc'],self.header,mode=self.mode)
             self.catalogue['RA'] = Ra
             self.catalogue['DEC'] = Dec
@@ -590,16 +590,16 @@ class sf:
             EFFGAIN = utils.get_EFFGAIN(self.header)
             EXPTIME = utils.get_EXPTIME(self.header)
             EFFRON = utils.get_EFFRON(self.header)
-            print('EFFGAIN: ',EFFGAIN)
-            print('EXPTIME: ',EXPTIME)
-            print('EFFRON: ',EFFRON)
-            print(self.catalogue['Noise'])
+            #print('EFFGAIN: ',EFFGAIN)
+            #print('EXPTIME: ',EXPTIME)
+            #print('EFFRON: ',EFFRON)
+            #print(self.catalogue['Noise'])
             self.catalogue['Flux_total_new'] = (self.catalogue['Flux_total']*EFFGAIN*EXPTIME - self.catalogue['Noise']*EFFGAIN*EXPTIME - RONoise(EFFRON,EFFGAIN,EXPTIME,self.catalogue['Area']))
-            print('Flux_total_new: ',self.catalogue['Flux_total_new'])
+            #print('Flux_total_new: ',self.catalogue['Flux_total_new'])
             self.catalogue['Flux_total_err'] = Flux_err(EFFRON,EFFGAIN,EXPTIME,self.catalogue['Area'],self.catalogue['Noise']*EFFGAIN*EXPTIME,self.catalogue['Flux_total_new'])
-            print('Flux_total_err: ',self.catalogue['Flux_total_err'])
+            #print('Flux_total_err: ',self.catalogue['Flux_total_err'])
             self.catalogue['SNR'] = self.catalogue['Flux_total_new']/self.catalogue['Flux_total_err']/self.catalogue['Area']
-            print('SNR: ',self.catalogue['SNR'])
+            #print('SNR: ',self.catalogue['SNR'])
             self.catalogue['MAG_err'] = 1/self.catalogue['SNR'] # use the approximate error for the magnitude.
             self.catalogue['Flux_total_new'] = self.catalogue['Flux_total_new']/(EFFGAIN*EXPTIME)
             self.catalogue['MAG_flux'] = ABmag(self.catalogue['Flux_total_new'])
@@ -630,18 +630,18 @@ class sf:
         if use_nproc:
             
             self.nproc = nproc
-            print('Creating polygons with {} processes'.format(self.nproc))
+            #print('Creating polygons with {} processes'.format(self.nproc))
             t0 = time.time()
             with Pool() as pool:
                 polygons = list(pool.imap(process, range(len(self.catalogue)), chunksize=len(self.catalogue)//self.nproc))
             t1 = time.time()
-            print('Time to create polygons: ',t1-t0)
+            #print('Time to create polygons: ',t1-t0)
 
         else:
             
             polygons = []
-            print(len(self.catalogue))
-            for index, row in tqdm(self.catalogue.iterrows(),total=len(self.catalogue),desc='Creating polygons'):
+            #print(len(self.catalogue))
+            for index, row in tqdm(self.catalogue.iterrows(),total=len(self.catalogue),desc='Creating polygons',disable=True):
             
                 try:
             
@@ -688,7 +688,7 @@ class sf:
             t0 = time.time()
             contour = utils._get_polygons_gpu(row.x1,row.y1,row.Birth,row.Death)
             t1 = time.time()
-            print('Time to create polygon: ',t1-t0)
+            #print('Time to create polygon: ',t1-t0)
             polygons.append(contour)
         self.polygons = polygons
 
@@ -771,7 +771,7 @@ class sf:
         """
         
         # get the extension from the save_path
-        print('Saving Catalogue to file: ',save_path)
+        #print('Saving Catalogue to file: ',save_path)
         fileextention = save_path.split('.')[-1]
         
         if filetype is None:
@@ -779,20 +779,20 @@ class sf:
             
         if filetype == 'csv':
             self.catalogue.to_csv(save_path,index=False,overwrite=overwrite)
-            print('Catalogue saved to: ',save_path)
+         #   print('Catalogue saved to: ',save_path)
         
         if filetype == 'fits':
-            print('Saving to fits with astropy')
+          #  print('Saving to fits with astropy')
             table = astropy.table.Table.from_pandas(self.catalogue)
             table.write(save_path,overwrite=overwrite)
         
         if filetype == 'hdf':
             self.catalogue.to_hdf(save_path,key='catalogue',mode='w')
-            print('Catalogue saved to: ',save_path)
+           # print('Catalogue saved to: ',save_path)
         
         if filetype == ('txt' or 'ascii'):
             self.catalogue.to_csv(save_path,index=False,overwrite=overwrite)
-            print('Catalogue saved to: ',save_path)
+            #print('Catalogue saved to: ',save_path)
             
             
             

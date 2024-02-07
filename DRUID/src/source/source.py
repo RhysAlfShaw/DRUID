@@ -398,7 +398,7 @@ def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=
         red_background_mask = np.where(red_mask == 0, np.nan, red_mask*background_map)
         
         Noise = abs(np.nansum(red_background_mask))
-        print('Noise',Noise)
+        #print('Noise',Noise)
         peak_coords = np.where(red_image == source_props['max_intensity'])
 
         y_peak_loc = peak_coords[0][0]

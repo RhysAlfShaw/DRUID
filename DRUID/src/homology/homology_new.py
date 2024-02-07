@@ -186,7 +186,7 @@ def correct_first_destruction(pd,output):
 
     pd['new_row'] = 0
 
-    for i in tqdm(range(0,len(pd)),total=len(pd),desc='Correcting first destruction',disable=output):
+    for i in tqdm(range(0,len(pd)),total=len(pd),desc='Correcting first destruction',disable=True):
 
         row = pd.iloc[i]
         #print(row)
@@ -252,7 +252,7 @@ def calculate_area_CPU(Birth,Death,row, img):
 
     
 def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
-                          output,bg_map=False,area_limit=3,GPU=False,lifetime_limit_fraction=2,
+                          output=False,bg_map=False,area_limit=3,GPU=False,lifetime_limit_fraction=2,
                           mean_bg=None, IDoffset=0, box_size=None,detection_threshold=None):
     
     global GPU_Option
@@ -260,7 +260,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
     t0_compute_ph = time.time()
     pd = cripser.computePH(-img,maxdim=0)
     t1_compute_ph = time.time()
-    print('Time to compute PH: {}'.format(t1_compute_ph-t0_compute_ph))
+    #print('Time to compute PH: {}'.format(t1_compute_ph-t0_compute_ph))
     pd = pandas.DataFrame(pd,columns=['dim','Birth','Death','x1','y1','z1','x2','y2','z2'],index=range(1,len(pd)+1))
     pd.drop(columns=['dim','z1','z2'],inplace=True)
     pd['lifetime'] = pd['Death'] - pd['Birth']
@@ -368,10 +368,10 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
             if GPU_AVAILABLE == True:
                 img_gpu = cp.asarray(img,dtype=cp.float64)
                 # Calculate area and enforce area limit Single Process.
-                print('Calculating area with GPU...')
+                #print('Calculating area with GPU...')
                 t0 = time.time()
                 
-                for i in tqdm(range(0,len(pd)),total=len(pd),desc='Calculating area',disable=not output):
+                for i in tqdm(range(0,len(pd)),total=len(pd),desc='Calculating area',disable=True):
                     
                     row = pd.iloc[i]
                     Birth = row.Birth
@@ -385,7 +385,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
                     bbox4.append(bbox[3].get())
                     
                 t1 = time.time()
-                print('Time to calculate area and inital bbox: {}'.format(t1-t0))
+                #print('Time to calculate area and inital bbox: {}'.format(t1-t0))
                 pd['area'] = area_list
                 pd['edge_flag'] = edge_list
                 pd['bbox1'] = bbox1
@@ -396,9 +396,9 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
                 
         else:
             
-            print('Calculating area with CPU...')
+            #print('Calculating area with CPU...')
             t0 = time.time()
-            for i in tqdm(range(0,len(pd)),total=len(pd),desc='Calculating area',disable=not output):
+            for i in tqdm(range(0,len(pd)),total=len(pd),desc='Calculating area',disable=True):
                 
                 row = pd.iloc[i]
                 Birth = row.Birth
@@ -412,7 +412,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
                 bbox4.append(bbox[3])
 
             t1 = time.time()
-            print('Time to calculate area and inital bbox: {}'.format(t1-t0))
+            #print('Time to calculate area and inital bbox: {}'.format(t1-t0))
             pd['area'] = area_list
             pd['edge_flag'] = edge_list
             pd['bbox1'] = bbox1

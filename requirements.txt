@@ -1,0 +1,11 @@
+numpy
+pandas
+pytest
+numpy
+scikit-image
+cripser
+astropy
+tqdm
+matplotlib
+setproctitle
+scipy
