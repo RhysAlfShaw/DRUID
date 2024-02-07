@@ -169,17 +169,17 @@ def large_mask_red_image_procc_CPU(Birth,Death,x1,y1,image):
             
             return red_image, red_mask, xmin, xmax, ymin, ymax
 
-import cv2
-import numpy as np
+#import cv2
+#import numpy as np
 
-def dilate_mask_circular(mask, radius):
+#def dilate_mask_circular(mask, radius):
     # Create a circular structuring element using cv2.getStructuringElement
-    circular_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*radius+1, 2*radius+1))
+#    circular_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*radius+1, 2*radius+1))
 
     # Perform dilation using cv2.dilate
-    dilated_mask = cv2.dilate(mask.astype(np.uint8), circular_kernel)
+#    dilated_mask = cv2.dilate(mask.astype(np.uint8), circular_kernel)#
 
-    return dilated_mask
+#    return dilated_mask
     
 
 def curve_of_growth_dilation(mask,image):
