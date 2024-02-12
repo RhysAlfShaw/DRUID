@@ -4,12 +4,12 @@
 File: main.py
 Author: Rhys Shaw
 Date: 23/12/2023
-Version: v1.0
+Version: 0.0
 Description: Main file for DRUID
 '''
 
 
-version = 'v1.0'
+version = '0.0'
 
 from .src.utils import utils 
 from .src.homology import homology_new as homology
@@ -29,7 +29,7 @@ from multiprocessing import Pool
 import time
 import os
 from scipy import ndimage
-
+import logging
 
 
 
@@ -80,7 +80,7 @@ class sf:
                  pb_path : str = None, cutup : bool = False, cutup_size : int = 500, 
                  cutup_buff : int = None, output : bool = True, 
                  area_limit : int = 5, smooth_sigma = 1, nproc : int = 1, GPU : bool = False, 
-                 header : astropy.io.fits.header.Header = None, Xoff : int = None, Yoff : int = None) -> None:
+                 header : astropy.io.fits.header.Header = None, Xoff : int = None, Yoff : int = None,debug_mode=False) -> None:
         """Initialise the DRUID, here general parameters can be set..
 
         Args:
@@ -105,7 +105,12 @@ class sf:
         # start up message!
         #print(DRUID_MESSAGE)
 
-
+        if debug_mode:
+            logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.DEBUG)
+            logging.debug('Debug mode enabled')
+        else:
+            logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+            
         self.cutup = cutup
         self.output = output
         self.image_path = image_path
@@ -124,15 +129,15 @@ class sf:
                 import cupy as cp
                 from cupyx.scipy.ndimage import label as cp_label
                 
-                num_gpus = cp.cuda.runtime.getDeviceCount()
+            #    num_gpus = cp.cuda.runtime.getDeviceCount()
                 #print(f'Found {num_gpus} GPUs')
                 
-                if num_gpus > 0:
-                    #print('GPUs are avalible, GPU functions will now be avalible.')
-                    GPU_AVALIBLE = True
-                else:
+            #    if num_gpus > 0:
+            #        #print('GPUs are avalible, GPU functions will now be avalible.')
+                   # GPU_AVALIBLE = True
+            #    else:
                     #print('No GPUs avalible, using CPU')
-                    GPU_AVALIBLE = False
+            #        GPU_AVALIBLE = False
             except:
                 
                 #print('Could not import cupy. DRUID GPU functions will not be avalible')
@@ -155,7 +160,7 @@ class sf:
         
         if self.smooth_sigma !=0:
             self.image = utils.smoothing(self.image,self.smooth_sigma)
-            #print('Image smoothed with sigma = {}'.format(self.smooth_sigma))
+            logging.info('Image smoothed with sigma = {}'.format(self.smooth_sigma))
             
         self.mode = mode
         # check if the mode is valid
@@ -222,7 +227,7 @@ class sf:
             
             catalogue_list = []
             IDoffset = 0
-            for i, cutout in enumerate(tqdm(self.cutouts),disable=True):
+            for i, cutout in enumerate(self.cutouts):
                 
                 #print("Computing for Cutout number :{}/{}".format(i+1, len(self.cutouts)))
                 
@@ -323,6 +328,7 @@ class sf:
             # time.sleep(2)
             
             if self.GPU==True:
+                import cupy as cp
                 # this is not the best way to deal with this. We should crop the gpu version of the image.
                 img_gpu = cp.asarray(img, dtype=cp.float64)
                 enclosed_i = homology.make_point_enclosure_assoc_GPU(0,x1,y1,Birth,Death,cat,img_gpu)
