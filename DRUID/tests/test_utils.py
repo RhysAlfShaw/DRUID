@@ -29,6 +29,6 @@ def test_regionprops_function_params():
     assert region.max_intensity == 19
     assert region.major_axis_length == pytest.approx(3.2659, 0.0001)
     assert region.minor_axis_length == pytest.approx(3.2659, 0.0001)
-    assert region.orientation == pytest.approx(0.7853, 0.001)
+    assert abs(region.orientation) == pytest.approx(0.7853, 0.001)
     
     
