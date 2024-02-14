@@ -103,7 +103,7 @@ class sf:
             ValueError: _description_
         """
         # start up message!
-        #print(DRUID_MESSAGE)
+        print(DRUID_MESSAGE)
 
         if debug_mode:
             logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.DEBUG)
@@ -229,7 +229,7 @@ class sf:
             IDoffset = 0
             for i, cutout in enumerate(self.cutouts):
                 
-                #print("Computing for Cutout number :{}/{}".format(i+1, len(self.cutouts)))
+                print("Computing for Cutout number :{}/{}".format(i+1, len(self.cutouts)))
                 
                 catalogue = homology.compute_ph_components(cutout,self.local_bg,analysis_threshold_val=self.analysis_threshold_val,
                                                         lifetime_limit=lifetime_limit,output=self.output,bg_map=self.bg_map,area_limit=self.area_limit,

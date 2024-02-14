@@ -257,10 +257,11 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
     
     global GPU_Option
     GPU_Option = GPU
+    print('Computing PH components...')
     t0_compute_ph = time.time()
     pd = cripser.computePH(-img,maxdim=0)
     t1_compute_ph = time.time()
-    #print('Time to compute PH: {}'.format(t1_compute_ph-t0_compute_ph))
+    print('Time to compute PH: {}'.format(t1_compute_ph-t0_compute_ph))
     pd = pandas.DataFrame(pd,columns=['dim','Birth','Death','x1','y1','z1','x2','y2','z2'],index=range(1,len(pd)+1))
     pd.drop(columns=['dim','z1','z2'],inplace=True)
     pd['lifetime'] = pd['Death'] - pd['Birth']
@@ -371,7 +372,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
                 #print('Calculating area with GPU...')
                 t0 = time.time()
                 
-                for i in tqdm(range(0,len(pd)),total=len(pd),desc='Calculating area',disable=True):
+                for i in tqdm(range(0,len(pd)),total=len(pd),desc='Calculating area',disable=not output):
                     
                     row = pd.iloc[i]
                     Birth = row.Birth
@@ -398,7 +399,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
             
             #print('Calculating area with CPU...')
             t0 = time.time()
-            for i in tqdm(range(0,len(pd)),total=len(pd),desc='Calculating area',disable=True):
+            for i in tqdm(range(0,len(pd)),total=len(pd),desc='Calculating area',disable=not output):
                 
                 row = pd.iloc[i]
                 Birth = row.Birth
