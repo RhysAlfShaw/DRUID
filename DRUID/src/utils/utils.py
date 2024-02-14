@@ -81,6 +81,7 @@ def get_psf_FWHM(header : fits.header.Header):
     return psf_FWHM_pixels
 
 
+
 def get_EFFGAIN(header : fits.header.Header):
     """Return the effective gain of the image.
 
@@ -107,6 +108,7 @@ def get_EFFRON(header : fits.header.Header):
     EFFRON = header['EFFRON']
     
     return EFFRON
+
 
 def get_EXPTIME(header : fits.header.Header):
     """Return the exposure time of the image.
