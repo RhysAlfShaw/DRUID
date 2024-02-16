@@ -29,3 +29,11 @@ def test_mean_value():
     # test that the mean value is correct
     # assert has to be approximately equal to the value because of float
     assert calculate_background(test_array, mode='mad_std')[1]== pytest.approx(13.0, 0.001)
+    
+def test_sigma_clipping_value():
+    # test that the sigma_clipping value is correct
+    # assert has to be approximately equal to the value because of float
+    assert calculate_background(test_array, mode='sigma_clip')[0]== pytest.approx(7.21110, 0.001)
+    
+def test_SEX_background_value():
+    assert calculate_background(test_array, mode='SEX')[0]== pytest.approx(7.21110, 0.001)
