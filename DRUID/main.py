@@ -9,7 +9,7 @@ Description: Main file for DRUID
 '''
 
 
-version = '0.0'
+version = '0.0.0'
 
 from .src.utils import utils 
 from .src.homology import homology_new as homology

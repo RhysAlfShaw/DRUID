@@ -10,10 +10,10 @@ Currently DRUID uses the `criper` (https://github.com/shizuo-kaji/CubicalRipser_
 
 # Installation
 
-To use DRUID currently the best way is to clone this repository and install the dependencies.
+To use DRUID currently the best way is to clone this repository and install it with its dependencies.
 
 ```bash
-pip install -r requirements.txt
+pip install .
 ```
 
 You can then test if it is working with.
