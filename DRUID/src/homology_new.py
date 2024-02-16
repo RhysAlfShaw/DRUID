@@ -2,8 +2,8 @@
 
 import cripser
 import numpy as np
-from .utils import utils
-from .background import background
+from ..src import utils
+from ..src import background
 
 import time
 import pandas
@@ -257,7 +257,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
     
     global GPU_Option
     GPU_Option = GPU
-    print('Computing PH components...')
+    print('Computing PH components...ls ')
     t0_compute_ph = time.time()
     pd = cripser.computePH(-img,maxdim=0)
     t1_compute_ph = time.time()

@@ -9,7 +9,7 @@ Description: This file contains the functions that deal with calculating
 
 import cripser
 import numpy as np
-from ..utils import utils
+from .src import utils
 import time
 from functools import partial
 import pandas

@@ -15,7 +15,7 @@ from .src import utils
 from .src import homology_new as homology
 from .src import background
 from matplotlib import colors
-from .src.source import source
+from .src import source
 import numpy as np
 from skimage import measure
 from tqdm import tqdm

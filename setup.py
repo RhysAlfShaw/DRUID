@@ -13,9 +13,5 @@ setup(
     install_requires=requiremets,
 
     packages=['DRUID',
-            'DRUID/src',
-            'DRUID/src/background',
-            'DRUID/src/homology',
-            'DRUID/src/source',
-            'DRUID/src/utils'],
+            'DRUID/src'],
 )
