@@ -8,7 +8,7 @@ Description: Functions for calculating source properties for sources.
 
 """
 
-from ..utils import utils
+from ..src import utils
 import pandas as pd
 import numpy as np
 from tqdm import tqdm

@@ -1,4 +1,4 @@
-from DRUID.src.background.background import calculate_background
+from DRUID.src.background import calculate_background
 import pytest
 import numpy as np
 # test the use of the calculate_background function

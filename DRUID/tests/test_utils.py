@@ -1,6 +1,6 @@
 import pytest 
 import numpy as np
-from DRUID.src.utils.utils import smoothing, get_region_props, model_beam_func, flux_correction_factor, bounding_box_cpu
+from DRUID.src.utils import smoothing, get_region_props, model_beam_func, flux_correction_factor, bounding_box_cpu
 
 test_image = np.array([[1,2,3,4,5],
                         [6,7,8,9,10],
