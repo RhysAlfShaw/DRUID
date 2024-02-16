@@ -9,3 +9,4 @@ tqdm
 matplotlib
 setproctitle
 scipy
+photutils
