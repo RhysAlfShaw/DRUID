@@ -11,9 +11,9 @@ Description: Main file for DRUID
 
 version = '0.0.0'
 
-from .src.utils import utils 
-from .src.homology import homology_new as homology
-from .src.background import background
+from .src import utils 
+from .src import homology_new as homology
+from .src import background
 from matplotlib import colors
 from .src.source import source
 import numpy as np

@@ -2,8 +2,8 @@
 
 import cripser
 import numpy as np
-from ..utils import utils
-from ..background import background
+from .utils import utils
+from .background import background
 
 import time
 import pandas
