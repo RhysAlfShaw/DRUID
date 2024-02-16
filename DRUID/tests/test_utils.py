@@ -1,6 +1,12 @@
 import pytest 
 import numpy as np
-from DRUID.src.utils import smoothing, get_region_props, model_beam_func, flux_correction_factor, bounding_box_cpu
+from astropy.io import fits
+from DRUID.src.utils import smoothing, get_region_props, model_beam_func, flux_correction_factor, bounding_box_cpu, open_image, calculate_beam, xy_to_RaDec, generate_2d_gaussian
+import pandas 
+
+PATH_test_image_file = 'https://drive.google.com/uc?id=10a6goXcr6wEHX9U5LQ07cCEo2nGQ9QK5'
+
+
 
 test_image = np.array([[1,2,3,4,5],
                         [6,7,8,9,10],
@@ -61,3 +67,27 @@ def test_bouding_box_cpu():
                     [0,0,0,0,0]])
     bounding_box = bounding_box_cpu(mask)
     assert bounding_box == (1,1,3,3)
+    
+def test_open_image():
+    image, header = open_image(PATH_test_image_file)
+    assert image.shape == (256,256)
+    assert type(header) == fits.header.Header
+    
+def test_calculate_beam():
+    image, header = open_image(PATH_test_image_file)
+    header['BMAJ'] = 0.0001388888888888889
+    header['BMIN'] = 0.0001388888888888889
+    header['BPA'] = 0.0
+    beam,bmaj,bmin,bpa = calculate_beam(header)
+    assert beam == pytest.approx(0.28327, 0.0001)
+    assert bmaj == pytest.approx(0.5000, 0.0001)
+    assert bmin == pytest.approx(0.5000, 0.0001)
+    assert bpa == pytest.approx(0.0, 0.0001)
+    
+def test_xy_to_RaDec():
+    x,y = 128,128
+    image, header = open_image(PATH_test_image_file)
+    ra, dec = xy_to_RaDec(128,128,header,mode='Radio')
+    assert ra == pytest.approx(230.68, 0.0001)
+    assert dec == pytest.approx(54.64416, 0.0001)
+
