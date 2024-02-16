@@ -9,9 +9,9 @@ Description: Functions for calculating the background of an image.
 """
 
 import numpy as np
-from astropy.stats import mad_std
+from astropy.stats import mad_std, sigma_clip 
 import matplotlib.pyplot as plt
-
+from photutils.background import SExtractorBackground
 
 
 
@@ -83,7 +83,7 @@ def calculate_background_map(image,box_size,mode='mad_std'):
             subarray = image[xmin:xmin+box_size, ymin:ymin+box_size]
             #print(subarray)
             # Perform calculations on the subarray
-            box_mean_bg[i,j], box_std_bg[i,j] = radio_background(subarray,metric=mode)  
+            box_mean_bg[i,j], box_std_bg[i,j] = calculate_background(subarray,mode=mode)  
             
     #plt.imshow(box_mean_bg)
     #plt.savefig('box_mean_bg.png')
@@ -121,15 +121,40 @@ def calculate_background(image, mode='mad_std'):
     
         local_bg, mean_bg = radio_background(image, metric=mode)
 
+    elif mode == 'SEX' or mode == 'sigma_clip':
+        
+        local_bg, mean_bg = get_optical_background_estimate(image, mode)
+
     else:
         # some other method can be added here.
         raise ValueError('mode not recognised. Please use mad_std or rms')
     
     
+    
     return local_bg, mean_bg
 
 
+
+def get_optical_background_estimate(image ,mode):
+    """Returns the background estimates from the image. using the SExtractorBackground or Sigma Clipping.
+
+    Args:
+        image (_type_): _description_
+        mode (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    if mode == 'sigma_clip':
+        median = np.nanmedian(image)
+        std = sigma_clip(image).std()
+        return std, median
         
+    if mode == 'SEX':
+        bkg = SExtractorBackground()
+        bkg_sigma = bkg.sigma_clip(image).std()
+        bkg_meadian = np.median(bkg.sigma_clip(image))
+        return bkg_sigma, bkg_meadian
         
         
         
@@ -177,7 +202,7 @@ def radio_background(image : np.ndarray, metric : str ='mad_std'):
 
 
 def optical_background(nsamples : int, image : np.ndarray):
-
+        # old
         '''
 
         Returns the mean and standard deviation of a random sample of pixels in the image.
