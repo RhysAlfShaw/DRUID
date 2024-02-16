@@ -21,6 +21,15 @@ You can then test if it is working with.
 ```python
 from DRUID import sf
 ```
+## Note for Apple Silicon
+
+For Apple Silcon Users! cripser does not provide compiled binaries for apple silicon. So you need to compile the library locally. This should be simple with the command:
+
+```bash
+pip install -U git+https://github.com/shizuo-kaji/CubicalRipser_3dim
+```
+
+Any installation error from here will likely be from the the version of CMAKE or the C compilers you have installed. See https://github.com/shizuo-kaji/CubicalRipser_3dim for further details on required compilers.
 
 ## Using the GPU functionality
 
