@@ -173,7 +173,7 @@ def radio_background(image : np.ndarray, metric : str ='mad_std'):
 
     Returns:
     
-        local_bg (float): The local background of the image.
+        local_bg (float): The local background of the image./ 
     
     """
     

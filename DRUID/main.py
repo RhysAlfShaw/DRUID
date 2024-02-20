@@ -788,9 +788,19 @@ class sf:
          #   print('Catalogue saved to: ',save_path)
         
         if filetype == 'fits':
+            from astropy.table import Table
           #  print('Saving to fits with astropy')
-            table = astropy.table.Table.from_pandas(self.catalogue)
-            table.write(save_path,overwrite=overwrite)
+            enclosed_i = self.catalogue['enclosed_i']
+          
+            for i in range(len(enclosed_i)):
+                for j in range(len(enclosed_i[i])):
+                    enclosed_i[i][j] = int(enclosed_i[i][j])
+                if len(enclosed_i[i]) == 0:
+                    enclosed_i[i] = [0]
+            self.catalogue['enclosed_i'] = enclosed_i
+            t = Table.from_pandas(self.catalogue)
+            t.write(save_path,overwrite=overwrite)
+                
         
         if filetype == 'hdf':
             self.catalogue.to_hdf(save_path,key='catalogue',mode='w')
@@ -799,8 +809,16 @@ class sf:
         if filetype == ('txt' or 'ascii'):
             self.catalogue.to_csv(save_path,index=False,overwrite=overwrite)
             #print('Catalogue saved to: ',save_path)
-            
-            
+        
+    def open_catalogue(self,file_path,filetype=None):
+        from astropy.table import Table
+        
+        self.catalogue = Table.read(file_path)
+        
+        for i in range(len(self.catalogue)):
+            self.catalogue['contour'][i] = np.array(self.catalogue['contour'][i]).reshape(-1,2)
+        
+        self.catalogue = self.catalogue.to_pandas()    
             
             
     def save_polygons_to_ds9(self, filename):
@@ -819,6 +837,8 @@ class sf:
                     if i < len(polygon) - 1:
                         f.write(',')
                 f.write(')\n')
+                
+                
             
     def save_polygons_to_hdf5(self, filename):
 
