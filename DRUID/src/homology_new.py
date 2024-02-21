@@ -207,10 +207,12 @@ def correct_first_destruction(pd,output):
             new_row['ID'] = pd['ID'].max() + 1
             new_row['enclosed_i'] = []
             
+        
+            # concat the new row to the dataframe.
             
-            pd = pd.append(new_row,ignore_index=True)
-            
-    return pd
+            pd = pandas.concat([pd, new_row.to_frame().T], ignore_index=True)
+
+        return pd
 
 
 
