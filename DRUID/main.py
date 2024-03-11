@@ -80,7 +80,7 @@ class sf:
                  pb_path : str = None, cutup : bool = False, cutup_size : int = 500, 
                  cutup_buff : int = None, output : bool = True, 
                  area_limit : int = 5, smooth_sigma = 1, nproc : int = 1, GPU : bool = False, 
-                 header : astropy.io.fits.header.Header = None, Xoff : int = None, Yoff : int = None,debug_mode=False) -> None:
+                 header : astropy.io.fits.header.Header = None, Xoff : int = None, Yoff : int = None,debug_mode=False,remove_edge=True) -> None:
         """Initialise the DRUID, here general parameters can be set..
 
         Args:
@@ -120,6 +120,7 @@ class sf:
         self.Xoff = Xoff
         self.Yoff = Yoff
         self.cutup_buff = cutup_buff
+        self.remove_edge = remove_edge
         
         if self.GPU:
 
@@ -259,6 +260,10 @@ class sf:
                 #print('before duplicated removal :',len(self.catalogue))
                 #self.catalogue = utils.remove_duplicates(self.catalogue)
                 # drop any with edge_flag == 1
+                # set edge flag False to 0
+                self.catalogue['edge_flag'] = self.catalogue['edge_flag'].astype(int)
+            
+            if self.remove_edge:
                 self.catalogue = self.catalogue[self.catalogue.edge_flag != 1]
                 self.catalogue = self.catalogue.sort_values(by=['distance_from_center'],ascending=True)
                 self.catalogue = self.catalogue.drop_duplicates(subset=['x1','y1','Birth'], keep='first')
@@ -273,12 +278,14 @@ class sf:
             
             self.catalogue['Y0_cutout'] = 0
             self.catalogue['X0_cutout'] = 0
-            
-            self.catalogue = self.catalogue[self.catalogue.edge_flag != 1]
+            self.catalogue['edge_flag'] = self.catalogue['edge_flag'].astype(int)
+            if self.remove_edge:
+                self.catalogue = self.catalogue[self.catalogue.edge_flag != 1]
         
         # keeps the one closest to the center of its cutout.
         
         
+        print(self.catalogue)
         
         self.catalogue = self.catalogue.sort_values(by=['lifetime'],ascending=False)
         #print('after duplicate removal :',len(self.catalogue))
@@ -307,17 +314,15 @@ class sf:
             # is this a new row?
             #if row.new_row == 1:
             
-            # and buffer around the bounding box.
-            
-            img = self.image[row.bbox1-1:row.bbox3+1,row.bbox2-1:row.bbox4+1]
+            img = self.image[int(row.bbox1)-1:int(row.bbox3)+1,int(row.bbox2)-1:int(row.bbox4)+1]
             # reduce the cat to just the sources in the bounding box.
             
-            cat = self.catalogue[self.catalogue['x1'] > row.bbox1]
-            cat = cat[cat['x1'] < row.bbox3]
-            cat = cat[cat['y1'] > row.bbox2]
-            cat = cat[cat['y1'] < row.bbox4]
-            cat['x1'] = cat['x1'] - row.bbox1 + 1
-            cat['y1'] = cat['y1'] - row.bbox2 + 1
+            cat = self.catalogue[self.catalogue['x1'] > int(row.bbox1)]
+            cat = cat[cat['x1'] < int(row.bbox3)]
+            cat = cat[cat['y1'] > int(row.bbox2)]
+            cat = cat[cat['y1'] < int(row.bbox4)]
+            cat['x1'] = cat['x1'] - int(row.bbox1) + 1
+            cat['y1'] = cat['y1'] - int(row.bbox2) + 1
                 
                                 
             # plt.imshow(img,cmap='gray_r',norm=colors.LogNorm(clip=True,vmin=1E-13,vmax=1E-9))
@@ -334,6 +339,7 @@ class sf:
                 enclosed_i = homology.make_point_enclosure_assoc_GPU(0,x1,y1,Birth,Death,cat,img_gpu)
                 enclosed_i_list.append(enclosed_i)
             else:
+                print(self.catalogue)
                 enclosed_i = homology.make_point_enclosure_assoc_CPU(0,x1,y1,Birth,Death,cat,img)
                 enclosed_i_list.append(enclosed_i)
                 
@@ -344,10 +350,11 @@ class sf:
         
         #print(len(self.catalogue))
         t0_correct_firs = time.time()
+        print('BEfore',len(self.catalogue))
         self.catalogue = homology.correct_first_destruction(self.catalogue,output=not self.output)
         t1_correct_firs = time.time()
         #print('Time to correct first destruction: ',t1_correct_firs-t0_correct_firs)
-    
+        print('After',len(self.catalogue))
         # parent tag
         #print("Assigning parent tags..")
         t0_parent_tag = time.time()
@@ -798,6 +805,7 @@ class sf:
                 if len(enclosed_i[i]) == 0:
                     enclosed_i[i] = [0]
             self.catalogue['enclosed_i'] = enclosed_i
+            #print(self.catalogue)
             t = Table.from_pandas(self.catalogue)
             t.write(save_path,overwrite=overwrite)
                 

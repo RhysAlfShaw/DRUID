@@ -42,7 +42,7 @@ def make_point_enclosure_assoc_GPU(id,x1,y1,Birth,Death,pd,img_gpu):
     Returns:
         enclosed_list (list): _description_
     """
-    
+   # print(pd)
     mask = utils.get_mask_GPU(Birth,Death,x1,y1,img_gpu).get()
     #pdb.set_trace()
     mask_coords = np.column_stack((pd['x1'], pd['y1']))
@@ -55,6 +55,7 @@ def make_point_enclosure_assoc_GPU(id,x1,y1,Birth,Death,pd,img_gpu):
     #print(encloses_vectorized)
     #pdb.set_trace()
     return encloses_vectorized
+
 
 def make_point_enclosure_assoc_CPU(ID,x1,y1,Birth,Death,pd,img):
     """Returns a list of the ID of the points that are enclosed by the mask pd point.
@@ -193,14 +194,16 @@ def correct_first_destruction(pd,output):
         enlosed_i = row['enclosed_i']
         if len(enlosed_i) > 1: 
             new_row = row.copy()
-            
+            #print(i)
             new_row['Death'] = pd.loc[pd['ID'] == enlosed_i[1]]['Death']
             new_row['parent_tag'] = pd.loc[pd['ID'] == enlosed_i[1]]['ID']
             ## this accounts for a bug were the entire series is placed in the death column.
             # not sure on the origin of this but the following corrects for it. It only occationally happends so this is not 
-            # computationally expensive.
+            # computationally expensive
+            #print(new_row['Death'])
             if type(new_row['Death']) == pandas.core.series.Series:
                 # get the Death value from the first item in the Series.
+             #   print(new_row['Death'])
                 new_row['Death'] = new_row['Death'].iloc[0] # 
           
             new_row['new_row'] = 1
@@ -212,7 +215,10 @@ def correct_first_destruction(pd,output):
             
             pd = pandas.concat([pd, new_row.to_frame().T], ignore_index=True)
 
-        return pd
+            #pd = pd.append(new_row,ignore_index=True)
+            #pd.loc[len(pd)+1] = new_row
+            
+    return pd
 
 
 
@@ -235,7 +241,7 @@ def calculate_area_GPU(Birth,Death,row, img_gpu):
     mask = mask.get()
     edge = utils.check_edge(mask)
     if edge:
-        edge = 1
+        edge = True
     
     area = np.sum(mask)
     return area, edge, bounding_box
@@ -259,7 +265,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
     
     global GPU_Option
     GPU_Option = GPU
-    print('Computing PH components...ls ')
+    print('Computing PH components...')
     t0_compute_ph = time.time()
     pd = cripser.computePH(-img,maxdim=0)
     t1_compute_ph = time.time()
@@ -284,13 +290,14 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
     if bg_map:
         
         # for each row we need to assign the local bg value.
-        
+        pd['bg'] = pd['bg'].astype(float)
+        pd['mean_bg'] = pd['mean_bg'].astype(float)
         for index, row in pd.iterrows():
             
-            pd.loc[index,'bg'] = background.get_bg_value_from_result_image((int(row.x1),int(row.y1)), box_size, local_bg)
+            pd.loc[index,'bg'] = float(background.get_bg_value_from_result_image((int(row.x1),int(row.y1)), box_size, local_bg))
             #print('Detection_Thresh: ',row['bg'])
             #print('Birth :',row['Birth'])
-            pd.loc[index,'mean_bg'] = background.get_bg_value_from_result_image((int(row.x1),int(row.y1)), box_size, mean_bg)
+            pd.loc[index,'mean_bg'] = float(background.get_bg_value_from_result_image((int(row.x1),int(row.y1)), box_size, mean_bg))
             #print(row['mean_bg'])
             # evaluate if the death value is below the analysis threshold value at the birth point.
             # if it is then set the death value to the analysis threshold value.
