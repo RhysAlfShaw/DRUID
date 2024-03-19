@@ -267,6 +267,23 @@ class sf:
                 self.catalogue = self.catalogue[self.catalogue.edge_flag != 1]
                 self.catalogue = self.catalogue.sort_values(by=['distance_from_center'],ascending=True)
                 self.catalogue = self.catalogue.drop_duplicates(subset=['x1','y1','Birth'], keep='first')
+            else:
+                
+                for i, row in catalogue.iterrows():
+                    if row.edge_flag == 1:
+                        if row.bbox1 == 0:
+                            row.bbox1 = 1
+                        if row.bbox2 == 0:
+                            row.bbox2 = 1
+                        if row.bbox3 == self.image.shape[0]:
+                            row.bbox3 = self.image.shape[0]-1
+                        if row.bbox4 == self.image.shape[1]:
+                            row.bbox4 = self.image.shape[1]-1
+                            
+                        self.catalogue.at[i,'bbox1'] = row.bbox1
+                        self.catalogue.at[i,'bbox2'] = row.bbox2
+                        self.catalogue.at[i,'bbox3'] = row.bbox3
+                        self.catalogue.at[i,'bbox4'] = row.bbox4
                 
         else:
             IDoffset = 0
@@ -281,9 +298,23 @@ class sf:
             self.catalogue['edge_flag'] = self.catalogue['edge_flag'].astype(int)
             if self.remove_edge:
                 self.catalogue = self.catalogue[self.catalogue.edge_flag != 1]
-        
-        # keeps the one closest to the center of its cutout.
-        
+            else:
+                for i, row in catalogue.iterrows():
+                    if row.edge_flag == 1:
+                        if row.bbox1 == 0:
+                            row.bbox1 = 1
+                        if row.bbox2 == 0:
+                            row.bbox2 = 1
+                        if row.bbox3 == self.image.shape[0]:
+                            row.bbox3 = self.image.shape[0]-1
+                        if row.bbox4 == self.image.shape[1]:
+                            row.bbox4 = self.image.shape[1]-1
+                            
+                        self.catalogue.at[i,'bbox1'] = row.bbox1
+                        self.catalogue.at[i,'bbox2'] = row.bbox2
+                        self.catalogue.at[i,'bbox3'] = row.bbox3
+                        self.catalogue.at[i,'bbox4'] = row.bbox4
+                            
         
         print(self.catalogue)
         
@@ -622,50 +653,14 @@ class sf:
 
 
 
-    def create_polygons(self,use_nproc=False,nproc=4):
+    def create_polygons(self,use_gpu=False):
         '''
-
-        Parrallelised version of create_polygons. not recommended working.
-
+        Creates Polygons/contours best when you just want segmentations and not source charateristics.
         '''
-        def process(i):
-            
-            row = self.catalogue.iloc[i]
-            
-            try:
-            
-                return utils._get_polygons_CPU(row.x1, row.y1, row.Birth, row.Death,image=self.image)
-            
-            except:
-            
-                return None
-                
-        if use_nproc:
-            
-            self.nproc = nproc
-            #print('Creating polygons with {} processes'.format(self.nproc))
-            t0 = time.time()
-            with Pool() as pool:
-                polygons = list(pool.imap(process, range(len(self.catalogue)), chunksize=len(self.catalogue)//self.nproc))
-            t1 = time.time()
-            #print('Time to create polygons: ',t1-t0)
+        
+        self.catalogue = source.create_polygons(use_gpu=use_gpu,catalogue=self.catalogue,
+                                                cutout=self.image,output=self.output,cutupts=self.cutouts)
 
-        else:
-            
-            polygons = []
-            #print(len(self.catalogue))
-            for index, row in tqdm(self.catalogue.iterrows(),total=len(self.catalogue),desc='Creating polygons',disable=True):
-            
-                try:
-            
-                    contour = utils._get_polygons_CPU(row.x1,row.y1,row.Birth,row.Death,self.image)
-                    polygons.append(contour)
-            
-                except:
-            
-                    continue
-            
-        self.polygons = polygons
 
 
 

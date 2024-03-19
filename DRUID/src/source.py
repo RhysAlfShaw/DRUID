@@ -560,3 +560,97 @@ def measure_source_properties(use_gpu,catalogue=None,cutout=None,background_map=
     
     return create_params_df(False,params), polygons
 
+
+
+def create_polygons(use_gpu,catalogue=None,cutout=None,output=None,cutupts=None):
+    
+    if use_gpu:
+        
+        try:
+        
+            import cupy as cp
+        
+        except:
+        
+            raise ImportError('cupy not installed. GPU acceleration not possible.')
+    
+    image = cutout
+    if use_gpu:
+        image_gpu = cp.asarray(image, dtype=cp.float64)
+       
+        
+    Birth = catalogue['Birth'].to_numpy()
+    Death = catalogue['Death'].to_numpy()
+    
+    X0 = catalogue['X0_cutout'].to_numpy()
+    Y0 = catalogue['Y0_cutout'].to_numpy()
+    IDs = catalogue['ID'].to_numpy()
+    bbox1_og = catalogue['bbox1'].to_list()
+    bbox2_og = catalogue['bbox2'].to_list() 
+    bbox3_og = catalogue['bbox3'].to_list()
+    bbox4_og = catalogue['bbox4'].to_list()
+    
+    x1 = catalogue['x1'].to_numpy() #- 1 #- X0 
+    y1 = catalogue['y1'].to_numpy() #- 1#- X0 
+    polygons = []
+    for i, source in tqdm(enumerate(Birth),total=len(Birth),desc='Creating contours..',disable=not output):
+    
+        if use_gpu == True:
+            
+            cropped_image_gpu = image_gpu[bbox1_og[i]-1:bbox3_og[i]+1,bbox2_og[i]-1:bbox4_og[i]+1]
+            
+            try:
+                red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_GPU(Birth[i],Death[i],
+                                                                                        x1[i]-bbox1_og[i]+1,
+                                                                                        y1[i]-bbox2_og[i]+1,
+                                                                                        cropped_image_gpu,
+                                                                                        X0[i],Y0[i])
+            except:
+                
+                print('Error in GPU processing!')
+                print('Source ID: ',IDs[i])
+                print('x1:',x1[i]-bbox1_og[i]+1)
+                print('y1:',y1[i]-bbox2_og[i]+1)
+                print('Birth:',Birth[i])
+                print('Death:',Death[i])
+                #print('Cropped_image',cropped_image_gpu.get())
+                
+            red_mask = red_mask.astype(int)
+            
+            red_image = red_image.get()
+            red_mask = red_mask.get()
+            xmin = xmin.get() + bbox2_og[i]
+            xmax = xmax.get() + bbox2_og[i] 
+            ymin = ymin.get() + bbox1_og[i]
+            ymax = ymax.get() + bbox1_og[i]
+        
+        else:
+            cropped_image = image[bbox1_og[i]-1:bbox3_og[i]+1,bbox2_og[i]-1:bbox4_og[i]+1]
+            try:
+                red_image, red_mask, xmin, xmax, ymin, ymax = large_mask_red_image_procc_CPU(Birth[i],
+                                                                                            Death[i],
+                                                                                            int(x1[i])-int(bbox1_og[i])+1,
+                                                                                            int(y1[i])-int(bbox2_og[i])+1,
+                                                                                            cropped_image)
+            except:
+                print("Error in CPU processing!")
+                print('Source ID: ',IDs[i])
+                print('x1:',x1[i]-bbox1_og[i]+1)
+                print('y1:',y1[i]-bbox2_og[i]+1)
+                print('Birth:',Birth[i])
+                print('Death:',Death[i])
+                
+            red_mask = red_mask.astype(int)
+
+            xmin = xmin + bbox2_og[i]
+            xmax = xmax + bbox2_og[i]
+            ymin = ymin + bbox1_og[i]
+            ymax = ymax + bbox1_og[i]
+            
+
+    
+        contour = utils._get_polygons_in_bbox(xmin,xmax,ymin,ymax,x1[i],y1[i],Birth[i],Death[i],red_mask,0,0)
+        polygons.append(contour)
+        
+    catalogue['contour'] = polygons
+    return catalogue
