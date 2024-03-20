@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open('requirements.txt') as f:
     requiremets = f.read().splitlines()
@@ -11,7 +11,5 @@ setup(
     url='https://github.com/RhysAlfShaw/DRUID',
     description='descriptions',
     install_requires=requiremets,
-
-    packages=['DRUID',
-            'DRUID/src'],
+    packages=find_packages(),
 )
