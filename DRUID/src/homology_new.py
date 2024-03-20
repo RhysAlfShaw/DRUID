@@ -106,14 +106,14 @@ def classify_single(row):
             if row.parent_tag==row.ID: # no parent 
                 return 0 # no children, no parent.
             else:
-                return 1 # no child has parent.
+                return 2 # no child has parent.
         else:
             if row.parent_tag==row.ID: # no parent
-                return 2 # has children, no parent.
+                return 4 # has children, no parent.
             else:
                 return 3 # has children, has parent.
     else:
-        return 4 # new row has children.
+        return 1 # new row has children.
         
 
 def parent_tag_func_vectorized(df):
