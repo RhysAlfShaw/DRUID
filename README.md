@@ -62,6 +62,9 @@ findmysources.source_charaterising(use_gpu=False)
 
 To explore how DRUID can be used Check out the example notebooks where we demonstraight some of DRUIDs functions. (This is incoming, will be based on analysis in Shaw et al in prep)
 
+## Saving the catalogue.
+To save the output catalogue with the contours you should use the ```save_catalogue()``` function. As this will properly save the object. To correctly open the catalogue again use ```open_catalogue()``` after initlising the sf class.
+
 # Bugs/issues
 
 Please report any bug or issues using DRUID to this repositories issue page. Thank you.
