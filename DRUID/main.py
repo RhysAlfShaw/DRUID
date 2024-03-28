@@ -10,6 +10,8 @@ Description: Main file for DRUID
 
 
 version = '0.0.0'
+import setproctitle
+setproctitle.setproctitle('DRUID')
 
 from .src import utils 
 from .src import homology_new as homology
@@ -24,7 +26,6 @@ from astropy.io import fits
 from astropy.wcs import WCS
 import astropy
 import pandas as pd
-import setproctitle
 from multiprocessing import Pool
 import time
 import os
@@ -59,11 +60,6 @@ Version: {}
 For more information see:
 https://github.com/RhysAlfShaw/DRUID
         """.format(version)
-
-
-setproctitle.setproctitle('DRUID')
-
-
 
 
 
@@ -210,7 +206,7 @@ class sf:
 
 
 
-    def phsf(self, lifetime_limit : float = 0,lifetime_limit_fraction : float = 2,):
+    def phsf(self, lifetime_limit : float = 0,lifetime_limit_fraction : float = 2):
         
         """ Performs the persistent homology source finding algorithm.
         
@@ -229,7 +225,7 @@ class sf:
             
             catalogue_list = []
             IDoffset = 0
-            for i, cutout in enumerate(self.cutouts):
+            for i, cutout in tqdm(enumerate(self.cutouts),total=len(self.cutouts),desc='Processing Cutouts',disable=not self.output):
                 
                 print("Computing for Cutout number :{}/{}".format(i+1, len(self.cutouts)))
                 
@@ -297,6 +293,7 @@ class sf:
             self.catalogue['Y0_cutout'] = 0
             self.catalogue['X0_cutout'] = 0
             self.catalogue['edge_flag'] = self.catalogue['edge_flag'].astype(int)
+            
             if self.remove_edge:
                 self.catalogue = self.catalogue[self.catalogue.edge_flag != 1]
             else:
@@ -317,7 +314,7 @@ class sf:
                         self.catalogue.at[i,'bbox4'] = row.bbox4
                             
         
-        print(self.catalogue)
+        #print(self.catalogue)
         
         self.catalogue = self.catalogue.sort_values(by=['lifetime'],ascending=False)
         #print('after duplicate removal :',len(self.catalogue))
@@ -371,7 +368,7 @@ class sf:
                 enclosed_i = homology.make_point_enclosure_assoc_GPU(0,x1,y1,Birth,Death,cat,img_gpu)
                 enclosed_i_list.append(enclosed_i)
             else:
-                print(self.catalogue)
+                #print(self.catalogue)
                 enclosed_i = homology.make_point_enclosure_assoc_CPU(0,x1,y1,Birth,Death,cat,img)
                 enclosed_i_list.append(enclosed_i)
                 
@@ -382,11 +379,11 @@ class sf:
         
         #print(len(self.catalogue))
         t0_correct_firs = time.time()
-        print('BEfore',len(self.catalogue))
+        #print('BEfore',len(self.catalogue))
         self.catalogue = homology.correct_first_destruction(self.catalogue,output=not self.output)
         t1_correct_firs = time.time()
         #print('Time to correct first destruction: ',t1_correct_firs-t0_correct_firs)
-        print('After',len(self.catalogue))
+        #print('After',len(self.catalogue))
         # parent tag
         #print("Assigning parent tags..")
         t0_parent_tag = time.time()
@@ -442,6 +439,7 @@ class sf:
                     box_size = self.cutup_size
                 else:
                     pass
+                
         self.box_size = box_size
         if bg_map_bool == True:
             #print('Creating a background map. Inputed Box size = ',box_size)

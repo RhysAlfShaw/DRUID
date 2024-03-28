@@ -289,6 +289,7 @@ def compute_ph_components(img,local_bg,analysis_threshold_val,lifetime_limit,
     # assign each row the local bg valuw from the map.
     if bg_map:
         
+        # this is a slow function. Can it be improved?
         # for each row we need to assign the local bg value.
         pd['bg'] = pd['bg'].astype(float)
         pd['mean_bg'] = pd['mean_bg'].astype(float)
