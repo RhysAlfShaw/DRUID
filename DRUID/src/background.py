@@ -9,7 +9,7 @@ Description: Functions for calculating the background of an image.
 """
 
 import numpy as np
-from astropy.stats import mad_std, sigma_clip 
+from astropy.stats import mad_std, sigma_clipped_stats
 import matplotlib.pyplot as plt
 from photutils.background import SExtractorBackground
 
@@ -96,7 +96,17 @@ def calculate_background_map(image,box_size,mode='mad_std'):
 
 def get_bg_value_from_result_image(original_location_in_full_image, box_size, bg_map):
     i, j = original_location_in_full_image
-    result_value = bg_map[i//box_size + 1, j//box_size + 1]
+    x = i//box_size
+    y = j//box_size
+    # print(bg_map.shape)
+    # print(x,y)
+    # acount for image size not being a multiple of box size
+    if x >= bg_map.shape[0]:
+        x = bg_map.shape[0] - 1
+    if y >= bg_map.shape[1]:
+        y = bg_map.shape[1] - 1
+    
+    result_value = bg_map[x, y]
     return result_value
 
 
@@ -146,10 +156,10 @@ def get_optical_background_estimate(image ,mode):
         _type_: _description_
     """
     if mode == 'sigma_clip':
-        median = np.nanmedian(image)
-        std = sigma_clip(image).std()
-        return std, median
+        mean, median, std = sigma_clipped_stats(image,sigma=3,maxiters=5)
         
+        return std, median
+    
     if mode == 'SEX':
         bkg = SExtractorBackground()
         bkg_sigma = bkg.sigma_clip(image).std()
