@@ -1,0 +1,2 @@
+DRUID_KIDS_tile_21.6_-34.1.fits filter=lfs diff=lfs merge=lfs -text
+DRUID_LOCKMAN_HOLE_DEEP_FIELD.fits filter=lfs diff=lfs merge=lfs -text
