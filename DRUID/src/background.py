@@ -55,33 +55,19 @@ def radio_background_map(cutout: np.ndarray, box_size: int):
 
 def calculate_background_map(image, box_size, mode="mad_std"):
 
-    # do a sliding box to calculate the background
-    # calculate the background std and mean for each box.
-    # then upsample the map to the original image size.
-
     image_height, image_width = len(image), len(image[0])
-    # print('Image size: {},{}'.format(image_height,image_width))
-    # print('Number of Pixels in Image: {}'.format(image_height*image_width))
     box_sum = 0
     box_mean_bg = np.zeros((image_height // box_size + 1, image_width // box_size + 1))
     box_std_bg = np.zeros((image_height // box_size + 1, image_width // box_size + 1))
-    # estimate the dimensions of the background map
-    # print('Number of boxes to calculate: ', (image_height//box_size + 1) * (image_width//box_size + 1))
     for i in range(image_height // box_size + 1):
-        # print(i)
         for j in range(image_width // box_size + 1):
-            # Extract the subarray (box) from the image
             xmin = i * box_size
             ymin = j * box_size
             subarray = image[xmin : xmin + box_size, ymin : ymin + box_size]
-            # print(subarray)
-            # Perform calculations on the subarray
             box_mean_bg[i, j], box_std_bg[i, j] = calculate_background(
                 subarray, mode=mode
             )
 
-    # plt.imshow(box_mean_bg)
-    # plt.savefig('box_mean_bg.png')
     return box_mean_bg, box_std_bg
 
 
@@ -89,9 +75,6 @@ def get_bg_value_from_result_image(original_location_in_full_image, box_size, bg
     i, j = original_location_in_full_image
     x = i // box_size
     y = j // box_size
-    # print(bg_map.shape)
-    # print(x,y)
-    # acount for image size not being a multiple of box size
     if x >= bg_map.shape[0]:
         x = bg_map.shape[0] - 1
     if y >= bg_map.shape[1]:

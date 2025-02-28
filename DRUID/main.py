@@ -161,9 +161,10 @@ class sf:
             # )
 
         if self.smooth_sigma != 0:
-            self.image = utils.smoothing(self.image, self.smooth_sigma)
+            self.image_smooth = utils.smoothing(self.image, self.smooth_sigma)
             logging.info("Image smoothed with sigma = {}".format(self.smooth_sigma))
-
+        else:
+            self.image_smooth = self.image
         self.mode = mode
 
         if self.mode not in ["Radio", "optical", "other"]:
@@ -177,10 +178,16 @@ class sf:
         if self.cutup:
             self.cutup_size = cutup_size
             if self.cutup_buff is not None:
+                self.cutouts_smooth, self.coords = utils.cut_image_buff(
+                    self.image_smooth, cutup_size, buffer_size=self.cutup_buff
+                )
                 self.cutouts, self.coords = utils.cut_image_buff(
                     self.image, cutup_size, buffer_size=self.cutup_buff
                 )
             else:
+                self.cutouts_smooth, self.coords = utils.cut_image(
+                    cutup_size, self.image_smooth
+                )
                 self.cutouts, self.coords = utils.cut_image(cutup_size, self.image)
 
             if self.pb_path is not None:
@@ -194,6 +201,7 @@ class sf:
         else:
             self.cutup_size = None
             self.cutouts = None
+            self.cutouts_smooth = None
             self.coords = None
             self.pb_cutouts = None
             self.pb_coords = None
@@ -216,15 +224,15 @@ class sf:
             catalogue_list = []
             IDoffset = 0
             for i, cutout in tqdm(
-                enumerate(self.cutouts),
-                total=len(self.cutouts),
+                enumerate(self.cutouts_smooth),
+                total=len(self.cutouts_smooth),
                 desc="Processing Cutouts",
                 disable=not self.output,
             ):
 
                 print(
                     "Computing for Cutout number :{}/{}".format(
-                        i + 1, len(self.cutouts)
+                        i + 1, len(self.cutouts_smooth)
                     )
                 )
 
@@ -304,7 +312,7 @@ class sf:
         else:
             IDoffset = 0
             catalogue = homology.compute_ph_components(
-                self.image,
+                self.image_smooth,
                 self.local_bg,
                 analysis_threshold_val=self.analysis_threshold_val,
                 lifetime_limit=lifetime_limit,
@@ -318,6 +326,7 @@ class sf:
                 box_size=self.cutup_size,
                 detection_threshold=self.sigma,
             )
+
             self.catalogue = catalogue
 
             self.catalogue["Y0_cutout"] = 0
@@ -333,10 +342,10 @@ class sf:
                             row.bbox1 = 1
                         if row.bbox2 == 0:
                             row.bbox2 = 1
-                        if row.bbox3 == self.image.shape[0]:
-                            row.bbox3 = self.image.shape[0] - 1
-                        if row.bbox4 == self.image.shape[1]:
-                            row.bbox4 = self.image.shape[1] - 1
+                        if row.bbox3 == self.image_smooth.shape[0]:
+                            row.bbox3 = self.image_smooth.shape[0] - 1
+                        if row.bbox4 == self.image_smooth.shape[1]:
+                            row.bbox4 = self.image_smooth.shape[1] - 1
 
                         self.catalogue.at[i, "bbox1"] = row.bbox1
                         self.catalogue.at[i, "bbox2"] = row.bbox2
@@ -377,7 +386,7 @@ class sf:
             # is this a new row?
             # if row.new_row == 1:
 
-            img = self.image[
+            img = self.image_smooth[
                 int(row.bbox1) - 1 : int(row.bbox3) + 1,
                 int(row.bbox2) - 1 : int(row.bbox4) + 1,
             ]
@@ -454,16 +463,26 @@ class sf:
         bg_map_bool=False,
         box_size=None,
         mode="mad_std",
+        smooth=True,
     ):
 
         self.sigma = detection_threshold
         self.analysis_threshold = analysis_threshold
         self.bg_map = bg_map_bool
+        self.box_size = box_size
+        self.bgmode = mode
+        self.set_bg = set_bg
+        self.bg_map_bool = bg_map_bool
         # mode should be MAD_Std, RMS or other.
+
+        if smooth == True:
+            img = self.image_smooth
+        else:
+            img = self.image
 
         if mode == "Radio":
             # old verion was called radio.
-            mode = "mad_std"
+            bgmode = "mad_std"
 
         # need to account dor the cutputs if not usinh bg_map.
 
@@ -488,12 +507,12 @@ class sf:
                     pass
 
         self.box_size = box_size
-        print(self.box_size)
+
         if bg_map_bool == True:
             # print('Creating a background map. Inputed Box size = ',box_size)
             # these will be returned as arrays like a map.
             std, mean_bg = background.calculate_background_map(
-                self.image, box_size, mode=mode
+                img, box_size, mode=self.bgmode
             )
             # print('Background map created.')
             # print('Mean Background across cutouts: ', np.nanmean(std))
@@ -501,7 +520,7 @@ class sf:
 
         else:
             # print('Not creating a background map.')
-            std, mean_bg = background.calculate_background(self.image, mode=mode)
+            std, mean_bg = background.calculate_background(img, mode=self.bgmode)
             # print('Background set to: ',std)
             # print('Background mean set to: ',mean_bg)
 
@@ -538,7 +557,6 @@ class sf:
         self.bg_map = bg_map
         self.sigma = detection_threshold
         self.analysis_threshold = analysis_threshold
-
         if mode == "Radio":
             if self.cutup:
 
@@ -624,11 +642,21 @@ class sf:
             use_gpu (bool, optional): Option to use the GPU True to use and False to not,
                                       requires cupy module and a avalible GPU. Defaults to False.
         """
+        self.set_background(
+            detection_threshold=self.sigma,
+            analysis_threshold=self.analysis_threshold,
+            set_bg=self.set_bg,
+            bg_map_bool=self.bg_map_bool,
+            box_size=self.box_size,
+            mode=self.bgmode,
+            smooth=False,
+        )
 
         self.catalogue, self.polygons = source.measure_source_properties(
             use_gpu=use_gpu,
             catalogue=self.catalogue,
             cutout=self.image,
+            smooth_cutout=self.image_smooth,
             background_map=self.local_bg,
             output=self.output,
             cutupts=self.cutouts,
@@ -652,6 +680,7 @@ class sf:
         if self.header is not None:
             # try:
             # print('Converting Xc and Yc to RA and DEC')
+            print(self.catalogue["Xc"], self.catalogue["Yc"])
             Ra, Dec = utils.xy_to_RaDec(
                 self.catalogue["Xc"], self.catalogue["Yc"], self.header, mode=self.mode
             )

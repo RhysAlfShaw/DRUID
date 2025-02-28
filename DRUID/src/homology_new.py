@@ -1,3 +1,12 @@
+"""
+File: src/homology_new.py
+Author: Rhys Shaw
+Date: 27/12/2025
+Version: v1.0
+Description: Functions for calculating source properties for sources.
+
+"""
+
 import cripser
 import numpy as np
 from ..src import utils
@@ -7,13 +16,6 @@ import time
 import pandas
 from tqdm import tqdm
 
-# from multiprocessing import Pool, freeze_support
-
-# used for debugging
-
-import pdb
-
-# from collections import deque
 
 try:
     import cupy as cp
@@ -24,7 +26,8 @@ except:
     GPU_AVAILABLE = False
 
 # used for debugging
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+# import pdb
 
 
 def make_point_enclosure_assoc_GPU(id, x1, y1, Birth, Death, pd, img_gpu):
@@ -329,7 +332,6 @@ def correct_first_destruction(pd, output):
             ## this accounts for a bug were the entire series is placed in the death column.
             # not sure on the origin of this but the following corrects for it. It only occationally happends so this is not
             # computationally expensive
-            # print(new_row['Death'])
             if type(new_row["Death"]) == pandas.core.series.Series:
                 # get the Death value from the first item in the Series.
                 #   print(new_row['Death'])

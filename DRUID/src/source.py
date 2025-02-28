@@ -62,6 +62,7 @@ def create_params_df(cutup: bool, params: list):
             "X0_cutout",
             "Y0_cutout",
             "mean_bg",
+            "bg_rms",
             "Edge_flag",
             "contour",
             "enclosed_i",
@@ -119,16 +120,18 @@ def large_mask_red_image_procc_GPU(Birth, Death, x1, y1, image, X0, Y0):
             return red_image, red_mask, xmin, xmax, ymin, ymax
 
 
-def large_mask_red_image_procc_CPU(Birth, Death, x1, y1, image):
+def large_mask_red_image_procc_CPU(Birth, Death, x1, y1, image, image_smooth):
     """
     Does all gpu processing for the large mask.
 
     return the red_image and red_mask and the bounding box.
 
     """
-
     mask = np.zeros(image.shape)
-    mask = np.logical_or(mask, np.logical_and(image <= Birth, image > Death))
+    mask = np.logical_or(
+        mask, np.logical_and(image_smooth <= Birth, image_smooth > Death)
+    )
+    # print(mask.shape)
     # mask_enclosed = self.get_enclosing_mask_gpu(y1,x1,mask)
     labeled_mask, num_features = label(mask)
 
@@ -205,6 +208,7 @@ def measure_source_properties(
     use_gpu,
     catalogue=None,
     cutout=None,
+    smooth_cutout=None,
     background_map=None,
     output=None,
     cutupts=None,
@@ -247,6 +251,7 @@ def measure_source_properties(
     image = cutout
     if use_gpu:
         image_gpu = cp.asarray(image, dtype=cp.float64)
+        smooth_image_gpu = cp.asarray(smooth_cutout, dtype=cp.float64)
 
     Birth = catalogue["Birth"].to_numpy()
     Death = catalogue["Death"].to_numpy()
@@ -288,6 +293,10 @@ def measure_source_properties(
                 bbox1_og[i] - 1 : bbox3_og[i] + 1, bbox2_og[i] - 1 : bbox4_og[i] + 1
             ]
 
+            cropped_smooth_image_gpu = smooth_image_gpu[
+                bbox1_og[i] - 1 : bbox3_og[i] + 1, bbox2_og[i] - 1 : bbox4_og[i] + 1
+            ]
+
             try:
                 red_image, red_mask, xmin, xmax, ymin, ymax = (
                     large_mask_red_image_procc_GPU(
@@ -323,6 +332,9 @@ def measure_source_properties(
             cropped_image = image[
                 bbox1_og[i] - 1 : bbox3_og[i] + 1, bbox2_og[i] - 1 : bbox4_og[i] + 1
             ]
+            cropped_smooth_image = smooth_cutout[
+                bbox1_og[i] - 1 : bbox3_og[i] + 1, bbox2_og[i] - 1 : bbox4_og[i] + 1
+            ]
             try:
                 red_image, red_mask, xmin, xmax, ymin, ymax = (
                     large_mask_red_image_procc_CPU(
@@ -331,6 +343,7 @@ def measure_source_properties(
                         int(x1[i]) - int(bbox1_og[i]) + 1,
                         int(y1[i]) - int(bbox2_og[i]) + 1,
                         cropped_image,
+                        cropped_smooth_image,
                     )
                 )
             except:
@@ -418,6 +431,7 @@ def measure_source_properties(
         source_props = utils.props_to_dict(source_props[0])
         # print(background_map)
         background_map = bg[i] / sigma  # background_map
+        bg_rms = background_map
         # print('Mean bg',mean_bg)
         mean_bg_s = mean_bg[i]
 
@@ -426,6 +440,7 @@ def measure_source_properties(
         red_background_mask = np.where(red_mask == 0, np.nan, red_mask * background_map)
 
         Noise = np.nansum(red_background_mask)
+
         # print('Noise',Noise)
         peak_coords = np.where(red_image == source_props["max_intensity"])
 
@@ -606,6 +621,7 @@ def measure_source_properties(
                     X0[i],
                     Y0[i],
                     mean_bg_s,
+                    bg_rms,
                     Edge_flags[i],
                     contour,
                     enclosed_i[i],
