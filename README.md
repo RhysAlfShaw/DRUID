@@ -75,4 +75,4 @@ If you want to increase the functionality, whether thats adding additional funct
 
 # Acknowledgements
 
-If you use DRUID for your research please cite: ([Shaw et al. 2025](https://doi.org/10.1093/rasti/rzaf006))
+If you use DRUID for your research please cite: ([Shaw et al.2025](https://doi.org/10.1093/rasti/rzaf006))
