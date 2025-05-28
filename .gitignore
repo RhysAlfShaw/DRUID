@@ -1,8 +1,8 @@
 *.pyc
 *.pytest_cache
 *.vscode
-
-
+*.DS_Store
+ignore/
 *.svg
 *.fits
 *.o
