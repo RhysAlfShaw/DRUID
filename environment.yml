@@ -1,0 +1,20 @@
+name: DRUID
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    - numpy
+    - pandas
+    - pytest
+    - numpy
+    - scikit-image
+    - astropy
+    - tqdm
+    - matplotlib
+    - setproctitle
+    - scipy
+    - photutils
+    - cripser
