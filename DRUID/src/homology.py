@@ -1,7 +1,7 @@
 import cripser
 import numpy as np
 import polars as pl
-
+from scipy.ndimage import label as scipy_label
 from tqdm import tqdm
 
 
@@ -9,7 +9,9 @@ def get_enclosing_mask_CPU(x, y, mask):
     """
     Returns the connected components inside the mask starting from the point (x, y).
     """
-    labeled_mask, num_features = label(mask)
+    from skimage.measure import label
+
+    labeled_mask, num_features = scipy_label(mask)
 
     # Check if the specified pixel is within the mask
     if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0]:
@@ -135,7 +137,7 @@ if __name__ == "__main__":
     # plt.show()
     import time
 
-    img = components[0]
+    img = components[1]
     t0_compute_ph = time.time()
     pd = cripser.computePH(-img, maxdim=0)
     t1_compute_ph = time.time()
@@ -176,27 +178,94 @@ if __name__ == "__main__":
     # for each of the components compute the area left between the birth and death.
 
     # compute the area of the component
+    # for each of the components compute the area left between the birth and death.
 
-    for row in polar_df.iter_rows():
-        # get the component
-        index = row.index
-        component = components[0]
+    # compute the area of the component
+    areas = []
+    bbox_min_y_list = []
+    bbox_min_x_list = []
+    bbox_max_y_list = []
+    bbox_max_x_list = []
 
-        # get mask of the component using brith and death values.
-        birth = row["birth"]
-        death = row["death"]
+    # Assuming 'components[0]' is the correct component for all rows in polar_df
+    # If each row corresponds to a different component, you'll need to adjust this.
+    # For now, let's stick to the logic in your snippet.
+    component_img = components[0]
+
+    for row_tuple in polar_df.iter_rows(
+        named=True
+    ):  # named=True gives you a dictionary per row
+        # get mask of the component using birth and death values.
+        birth = row_tuple["birth"]
+        death = row_tuple["death"]
+        x1 = row_tuple["x1"]
+        y1 = row_tuple["y1"]
 
         mask = get_mask_CPU(
-            row["x1"],
-            row["y1"],
+            x1,  # Note: Your get_mask_CPU expects x1, y1, Birth, Death, img
+            y1,
             birth,
             death,
-            component,
+            component_img,  # Use the pre-selected component
         )
-        bounding_box = bounding_box_cpu(mask)
 
-        # compute the area of the component
-        area = np.sum(mask)
-        polar_df.at[index, "area"] = area
+        if mask is not None:
+            bounding_box = bounding_box_cpu(mask)
+            area = np.sum(mask)
 
-    print(polar_df)
+            areas.append(area)
+            bbox_min_y_list.append(bounding_box[0])
+            bbox_min_x_list.append(bounding_box[1])
+            bbox_max_y_list.append(bounding_box[2])
+            bbox_max_x_list.append(bounding_box[3])
+        else:
+            # Handle cases where mask is None (e.g., point outside, no component)
+            # Append NaN or a placeholder, or filter these rows out later
+            areas.append(np.nan)
+            bbox_min_y_list.append(np.nan)
+            bbox_min_x_list.append(np.nan)
+            bbox_max_y_list.append(np.nan)
+            bbox_max_x_list.append(np.nan)
+
+    # Add the new columns to the DataFrame
+    polar_df = polar_df.with_columns(
+        [
+            pl.Series("area", areas),
+            pl.Series("bbox_min_y", bbox_min_y_list),
+            pl.Series("bbox_min_x", bbox_min_x_list),
+            pl.Series("bbox_max_y", bbox_max_y_list),
+            pl.Series("bbox_max_x", bbox_max_x_list),
+        ]
+    )
+
+    # remove those with area < 5 pixels
+    polar_df = polar_df.filter(polar_df["area"] > 5)
+
+    # plot the components with bounding boxes
+    plt.figure(figsize=(10, 8))
+    plt.imshow(
+        component_img, origin="lower", cmap="nipy_spectral", interpolation="nearest"
+    )
+    for row_tuple in polar_df.iter_rows(named=True):
+
+        bbox_min_y = row_tuple["bbox_min_y"]
+        bbox_min_x = row_tuple["bbox_min_x"]
+        bbox_max_y = row_tuple["bbox_max_y"]
+        bbox_max_x = row_tuple["bbox_max_x"]
+
+        if not np.isnan(bbox_min_y) and not np.isnan(bbox_min_x):
+            # Draw the bounding box
+            plt.gca().add_patch(
+                plt.Rectangle(
+                    (bbox_min_x, bbox_min_y),
+                    bbox_max_x - bbox_min_x,
+                    bbox_max_y - bbox_min_y,
+                    edgecolor="blue",
+                    facecolor="none",
+                    linewidth=2,
+                )
+            )
+
+    plt.title("Component with Bounding Boxes")
+    plt.colorbar()
+    plt.show()
