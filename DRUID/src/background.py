@@ -1,6 +1,7 @@
 import numpy as np
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
+
 from photutils.background import (
     Background2D,
     MedianBackground,
@@ -92,7 +93,7 @@ def calculate_background_maps(
     with fits.open(image_path) as hdul:
         data = hdul[0].data
 
-    # Mask sources
+    # mask sources
     mask = make_source_mask(data, nsigma=nsigma, kernel_size=kernel_size)
 
     # calculate background and RMS Avalible background estimators
@@ -174,73 +175,53 @@ def make_gaussian_sources_image(image_size, sources):
 
 
 if __name__ == "__main__":
-    # Example usage:
-    # Create a dummy FITS file for demonstration
+
     from astropy.wcs import WCS
     from astropy.coordinates import SkyCoord
 
-    # Define image parameters
     image_size = (1000, 1000)
     pixel_scale = 0.1  # degrees per pixel
     center_coord = SkyCoord(ra=180, dec=30, unit="deg")
 
-    # Create a dummy WCS
     wcs = WCS(naxis=2)
     wcs.wcs.crpix = [image_size[0] / 2, image_size[1] / 2]
     wcs.wcs.cdelt = np.array([-pixel_scale, pixel_scale])
     wcs.wcs.crval = [center_coord.ra.deg, center_coord.dec.deg]
     wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    num_sources = 6
 
-    # Create dummy sources
+    # Define some dummy sources with different parameters
+    amplitude = np.random.uniform(50, 200, num_sources)
+    x_means = np.random.uniform(100, 900, num_sources)
+    y_means = np.random.uniform(100, 900, num_sources)
+    x_stds = np.random.uniform(5, 20, num_sources)
+    y_stds = np.random.uniform(5, 20, num_sources)
+    thetas = np.random.uniform(0, 2 * np.pi, num_sources)
+
+    # put tow gaussians close together
+
+    amplitude[0] = 200
+    amplitude[1] = 200
+    x_means[0] = 500
+    y_means[0] = 500
+    x_means[1] = 520
+    y_means[1] = 520
+    x_stds[0] = 10
+    x_stds[1] = 10
+    y_stds[0] = 10
+    y_stds[1] = 10
+    thetas[0] = 0
+    thetas[1] = 0
     sources = [
         {
-            "amplitude": 100,
-            "x_mean": 500,
-            "y_mean": 500,
-            "x_stddev": 50,
-            "y_stddev": 50,
-            "theta": 0,
-        },
-        {
-            "amplitude": 150,
-            "x_mean": 150,
-            "y_mean": 150,
-            "x_stddev": 7,
-            "y_stddev": 7,
-            "theta": np.pi / 4,
-        },
-        {
-            "amplitude": 200,
-            "x_mean": 300,
-            "y_mean": 300,
-            "x_stddev": 10,
-            "y_stddev": 10,
-            "theta": np.pi / 2,
-        },
-        {
-            "amplitude": 80,
-            "x_mean": 700,
-            "y_mean": 800,
-            "x_stddev": 6,
-            "y_stddev": 6,
-            "theta": np.pi / 3,
-        },
-        {
-            "amplitude": 120,
-            "x_mean": 900,
-            "y_mean": 200,
-            "x_stddev": 8,
-            "y_stddev": 8,
-            "theta": np.pi / 6,
-        },
-        {
-            "amplitude": 90,
-            "x_mean": 400,
-            "y_mean": 600,
-            "x_stddev": 4,
-            "y_stddev": 4,
-            "theta": np.pi / 8,
-        },
+            "amplitude": amplitude[i],
+            "x_mean": x_means[i],
+            "y_mean": y_means[i],
+            "x_stddev": x_stds[i],
+            "y_stddev": y_stds[i],
+            "theta": thetas[i],
+        }
+        for i in range(num_sources)
     ]
 
     # Create a dummy image with sources and background noise
@@ -254,9 +235,9 @@ if __name__ == "__main__":
 
     print(f"Dummy FITS file created at: {dummy_fits_path}")
 
-    # Calculate background maps
+    # calculate background maps
     background_map, background_rms_map = calculate_background_maps(dummy_fits_path)
-    # save the background maps to a FITS file
+    # save the background maps to a FITS file for testing purposes with other functions.
     background_hdu = fits.PrimaryHDU(background_map)
     background_rms_hdu = fits.PrimaryHDU(background_rms_map)
     background_hdu.writeto("DRUID/temp/background_map.fits", overwrite=True)
@@ -266,7 +247,6 @@ if __name__ == "__main__":
     print("Background map calculated.")
     print("Background RMS map calculated.")
 
-    # You can optionally save the background maps to
     # plot the results with matplotlib or any other visualization library.
     from matplotlib import pyplot as plt
 

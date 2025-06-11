@@ -5,6 +5,186 @@ from scipy.ndimage import label as scipy_label
 from tqdm import tqdm
 
 
+def classify_single(row):
+    """Classifiying the Rows based on orgin.
+
+    Args:
+        row: pd.series - The row that is being classified.
+
+    Returns:
+        Class: int - the Class integer that indiceates the class the row belongs too.
+
+    """
+    print(row)
+    if row["new_row"] == 0:
+        if len(row["encloses"]) == 0:  # no children
+            if np.isnan(row["parent_tag"]):  # no parent
+                return 0  # no children, no parent.
+            else:
+                return 1  # no child has parent.
+        else:
+            if np.isnan(row["parent_tag"]):
+                return 2  # has children, no parent.
+            else:
+                return 3  # has children, has parent.
+    else:
+        return 4  # new row has children.
+
+
+def correct_first_destruction_pl(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Function for correcting for the First destruction of a parent Island, adapted for Polars.
+
+    This function identifies rows with "enclosed" islands, creates a new row for each,
+    and inherits properties from the first enclosed island.
+
+    Args:
+        df (pl.DataFrame): Input catalogue of sources to correct.
+
+    Returns:
+        pl.DataFrame: The new catalogue with added rows.
+    """
+    # Ensure the 'new_row' column exists, initializing to 0
+    if "new_row" not in df.columns:
+        df = df.with_columns(pl.lit(0, dtype=pl.Int8).alias("new_row"))
+
+    # 1. Filter the DataFrame to find all rows that have enclosed islands.
+    islands_to_split = df.filter(pl.col("encloses").list.len() > 0)
+
+    # If no such rows exist, return the original DataFrame.
+    if islands_to_split.is_empty():
+        return df
+
+    # 2. Perform a self-join to fetch the 'Death' attribute from the parent island.
+    # The parent is identified by the first ID in the 'enclosed_i' list.
+    new_rows_base = islands_to_split.join(
+        # Select only the necessary columns from the right side of the join
+        df.select(["ID", "death"]),
+        # Join condition: first element of 'enclosed_i' matches 'ID'
+        left_on=pl.col("encloses").list.get(0),
+        right_on="ID",
+        how="inner",
+        # Suffix prevents column name collisions ('Death' becomes 'Death_parent')
+        suffix="_parent",
+    )
+
+    # If the join results in an empty DataFrame, return the original.
+    if new_rows_base.is_empty():
+        return df
+
+    # 3. Generate a range of new, unique IDs for the rows to be added.
+    # This correctly assigns a different ID to each new row.
+    max_id = df["ID"].max()
+    num_new_rows = len(new_rows_base)
+    id_dtype = df.schema["ID"]  # Match the original ID data type
+    new_ids = pl.int_range(
+        start=max_id + 1,
+        end=max_id + num_new_rows + 1,
+        dtype=id_dtype,
+        eager=True,  # Generate the series of new IDs immediately
+    )
+
+    # 4. Construct the new rows with updated and new values.
+    new_rows = (
+        new_rows_base.with_columns(
+            # Overwrite the original ID with the new unique ID
+            ID=new_ids,
+            # Update 'Death' with the value from the joined parent
+            Death=pl.col("death_parent"),
+            # Set 'parent_tag' to the ID of the parent island
+            parent_tag=pl.col("ID_parent"),
+            # Mark this as a newly generated row
+            new_row=pl.lit(1, dtype=pl.Int8),
+            # Set 'enclosed_i' to an empty list
+            enclosed_i=pl.lit(None, dtype=df.schema["encloses"]),
+        )
+        # Remove temporary columns created by the join
+        .drop(["ID_parent", "death_parent"])
+        # Ensure the column order matches the original DataFrame
+        .select(df.columns)
+    )
+
+    # 5. Concatenate the original DataFrame with the newly created rows.
+    return pl.concat([df, new_rows], how="vertical")
+
+
+def parent_tag_func_pl(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Sets the 'parent_tag' for each row based on 'enclosed_i' lists.
+
+    This function identifies parent-child relationships where a parent's
+    'enclosed_i' list contains child IDs. It then creates a 'parent_tag'
+    column where each child's tag is set to its parent's ID. If an ID is
+    not a child, its 'parent_tag' is set to its own ID.
+
+    Args:
+        df: The input Polars DataFrame. Must contain 'ID' and 'enclosed_i'
+            (list of IDs) columns.
+
+    Returns:
+        The DataFrame with an added 'parent_tag' column.
+    """
+    # 1. Filter to get only the rows that are parents (i.e., they enclose other islands).
+    # We also select only the necessary columns for creating the mapping.
+    parents = df.filter(pl.col("encloses").list.len() > 1).select(
+        pl.col("ID").alias("parent_id"), pl.col("encloses")
+    )
+
+    # 2. Create the parent-child mapping.
+    # We "explode" the 'enclosed_i' list so that each child ID gets its own row
+    # next to its parent's ID. This is the Polars way to create a lookup table.
+    mapping = (
+        parents.explode("encloses")
+        .rename({"encloses": "child_id"})
+        .filter(pl.col("child_id") != pl.col("parent_id"))  # Exclude self-references
+    )
+
+    # 3. Join the original DataFrame with the mapping.
+    # This will add a 'parent_id' column to our DataFrame, but it will only
+    # have values for rows that are children. Other rows will have null.
+    df_with_parent_info = df.join(
+        mapping, left_on="ID", right_on="child_id", how="left"
+    )
+
+    # 4. Create the final 'parent_tag' column.
+    # We use coalesce() to fill in the missing values. It takes the first
+    # non-null value it finds. So, if 'parent_id' exists, we use it;
+    # otherwise, we fall back to the row's own 'ID'.
+    df_final = df_with_parent_info.with_columns(
+        parent_tag=pl.when(pl.col("parent_id").is_not_null())
+        .then(pl.col("parent_id"))
+        .otherwise(pl.col("ID"))
+    ).drop(
+        "parent_id"
+    )  # Clean up the temporary column
+    return df_final
+
+
+def make_point_enclosure_assoc_CPU(x1, y1, Birth, Death, pd, img):
+    """Returns a list of the ID of the points that are enclosed by the mask pd point.
+        Uses GPU for computation.
+
+    Args:
+        Birth (float): _description_
+        Death (float): _description_
+        row (pd.Series): _description_
+        pd (pl.DataFrame): polars DataFrame with point data.
+        img (np.ndarray): _description_
+        img_gpu (cp.ndarray): _description_
+
+    Returns:
+        enclosed_list (list): _description_
+    """
+    mask = get_mask_CPU(x1, y1, Birth, Death, img)
+    mask_coords = np.column_stack((pd["x1"], pd["y1"]))
+
+    points_inside_mask = mask[
+        mask_coords[:, 0].astype(int), mask_coords[:, 1].astype(int)
+    ]
+    encloses_vectorized = pd.filter(points_inside_mask)["ID"].to_list()
+    return encloses_vectorized
+
+
 def get_enclosing_mask_CPU(x, y, mask):
     """
     Returns the connected components inside the mask starting from the point (x, y).
@@ -128,23 +308,17 @@ if __name__ == "__main__":
         components.append(component)
 
     print(f"Found {len(components)} components.")
-    # plt.figure(figsize=(8, 6))
-    # plt.imshow(
-    #     components[0], origin="lower", cmap="nipy_spectral", interpolation="nearest"
-    # )
-    # plt.title("Labeled Image")
-    # plt.colorbar()
-    # plt.show()
+
     import time
 
-    img = components[1]
+    img = components[2]
     t0_compute_ph = time.time()
     pd = cripser.computePH(-img, maxdim=0)
     t1_compute_ph = time.time()
+
     print(
         f"Computed persistent homology in {t1_compute_ph - t0_compute_ph:.2f} seconds."
     )
-    # create polar dataframe to handle the data
 
     columns = ["dim", "birth", "death", "x1", "y1", "z1", "x2", "y2", "z2"]
     polar_df = pl.DataFrame(pd, schema=columns)
@@ -165,7 +339,7 @@ if __name__ == "__main__":
         (polar_df["birth"] - polar_df["death"]).alias("lifetimeFrac")
     )
     print(len(polar_df))
-    liftetime_limit_fraction = 3.0  # set the lifetime limit fraction
+    liftetime_limit_fraction = 1.0  # set the lifetime limit fraction
     # filter out components with lifetime less than 3
     polar_df = polar_df.filter(polar_df["lifetime"] > liftetime_limit_fraction)
     print(
@@ -190,7 +364,7 @@ if __name__ == "__main__":
     # Assuming 'components[0]' is the correct component for all rows in polar_df
     # If each row corresponds to a different component, you'll need to adjust this.
     # For now, let's stick to the logic in your snippet.
-    component_img = components[0]
+    component_img = components[2]
 
     for row_tuple in polar_df.iter_rows(
         named=True
@@ -221,7 +395,7 @@ if __name__ == "__main__":
         else:
             # Handle cases where mask is None (e.g., point outside, no component)
             # Append NaN or a placeholder, or filter these rows out later
-            areas.append(np.nan)
+            areas.append(0)
             bbox_min_y_list.append(np.nan)
             bbox_min_x_list.append(np.nan)
             bbox_max_y_list.append(np.nan)
@@ -238,21 +412,19 @@ if __name__ == "__main__":
         ]
     )
 
-    # remove those with area < 5 pixels
-    polar_df = polar_df.filter(polar_df["area"] > 5)
+    plt.figure(figsize=(10, 10))
+    plt.imshow(component_img, cmap="gray", origin="lower")
+    plt.title("Component Image with Bounding Boxes")
 
-    # plot the components with bounding boxes
-    plt.figure(figsize=(10, 8))
-    plt.imshow(
-        component_img, origin="lower", cmap="nipy_spectral", interpolation="nearest"
-    )
+    # remove those with area < 5 pixels
+    polar_df = polar_df.filter(polar_df["area"] > 2)
+
     for row_tuple in polar_df.iter_rows(named=True):
 
         bbox_min_y = row_tuple["bbox_min_y"]
         bbox_min_x = row_tuple["bbox_min_x"]
         bbox_max_y = row_tuple["bbox_max_y"]
         bbox_max_x = row_tuple["bbox_max_x"]
-
         if not np.isnan(bbox_min_y) and not np.isnan(bbox_min_x):
             # Draw the bounding box
             plt.gca().add_patch(
@@ -266,6 +438,51 @@ if __name__ == "__main__":
                 )
             )
 
-    plt.title("Component with Bounding Boxes")
     plt.colorbar()
     plt.show()
+    # assign an ID to each point in the polar_df
+    polar_df = polar_df.with_columns(pl.Series("ID", range(len(polar_df))))
+
+    polar_df = polar_df.with_columns(
+        pl.Series(
+            "encloses",
+            [
+                make_point_enclosure_assoc_CPU(
+                    row["x1"],
+                    row["y1"],
+                    row["birth"],
+                    row["death"],
+                    polar_df,
+                    component_img,
+                )
+                for row in polar_df.iter_rows(named=True)
+            ],
+        )
+    )
+
+    print("Enclosure associations computed.")
+    print(polar_df)
+    print(len(polar_df))
+    # correct first destruction
+    polar_df = correct_first_destruction_pl(polar_df)
+    print("First destruction corrected.")
+    print(polar_df)
+    print(len(polar_df))
+
+    # assign parent tags
+    polar_df = parent_tag_func_pl(polar_df)
+    print("Parent tags assigned.")
+    print(polar_df)
+    print(len(polar_df))
+
+    # calculate contours
+
+    # # Classify the components by iterating over each row and applying the classify_single function
+    # polar_df = polar_df.with_columns(
+    #     pl.col(
+    #         "Class", [classify_single(row) for row in polar_df.iter_rows(named=True)]
+    #     )  # Apply classification function
+    # )
+    # print("Components classified.")
+    # print(polar_df)
+    # print(len(polar_df))
