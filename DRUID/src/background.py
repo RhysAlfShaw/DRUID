@@ -52,7 +52,7 @@ def make_source_mask(data, nsigma=3.0, kernel_size=3):
 
 
 def calculate_background_maps(
-    image_path,
+    image,
     bg_estimator="median",
     box_size=(50, 50),
     filter_size=(3, 3),
@@ -90,10 +90,16 @@ def calculate_background_maps(
     background_rms_map : numpy.ndarray
         The calculated background RMS map.
     """
-    with fits.open(image_path) as hdul:
-        data = hdul[0].data
+    # Check if the input is a FITS file path or a numpy array
+    # to handle both cases of test and np.ndarray input.
+    if isinstance(image, str):
+        with fits.open(image) as hdul:
+            data = hdul[0].data
 
-    # mask sources
+    elif isinstance(image, np.ndarray):
+        data = image
+
+    # mask sources with sigma clipping.
     mask = make_source_mask(data, nsigma=nsigma, kernel_size=kernel_size)
 
     # calculate background and RMS Avalible background estimators
