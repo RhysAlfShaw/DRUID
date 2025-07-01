@@ -226,7 +226,7 @@ if __name__ == "__main__":
 
     # Create a dummy image with sources and background noise
     dummy_data = make_gaussian_sources_image(image_size, sources)
-    dummy_data += np.random.normal(0, 5, size=image_size)  # Add some noise
+    dummy_data += np.random.normal(0, 1, size=image_size)  # Add some noise
 
     # Create a dummy FITS file
     hdu = fits.PrimaryHDU(dummy_data, header=wcs.to_header())

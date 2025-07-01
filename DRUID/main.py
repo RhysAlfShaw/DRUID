@@ -1,6 +1,7 @@
 version = "1.0"
 
 import setproctitle
+ 
 
 setproctitle.setproctitle("DRUID")
 
@@ -9,7 +10,6 @@ DRUID_MESSAGE = """
               
               
 #############################################
-
 _______   _______          _________ ______  
 (  __  \ (  ____ )|\     /|\__   __/(  __  \ 
 | (  \  )| (    )|| )   ( |   ) (   | (  \  )
@@ -31,3 +31,7 @@ https://github.com/RhysAlfShaw/DRUID
         """.format(
     version
 )
+
+def main():
+
+    
