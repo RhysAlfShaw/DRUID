@@ -7,7 +7,7 @@ dependencies:
   - pip
   - pip:
     - numpy
-    - pandas
+    - polars
     - pytest
     - numpy
     - scikit-image
