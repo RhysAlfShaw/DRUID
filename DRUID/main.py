@@ -8,6 +8,7 @@ setproctitle.setproctitle("DRUID")
 import numpy as np
 import astropy
 from multiprocessing import Pool
+import polars as pl
 
 
 from .src import utils
@@ -103,7 +104,9 @@ class sf:
                 "Background map and RMS map must be set before running source finding."
                 "Please call set_background() first. or assign them manually."
             )
-
+        if self.verbose:
+            print("Thresholding to find source islands...")
+        # this function is rather slow.
         source_islands = source.create_source_islands(
             self.image,
             self.background_map,
@@ -124,9 +127,6 @@ class sf:
         if not images_to_process:
             if self.verbose:
                 print("No source islands to process.")
-            # Create an empty catalog if no islands are found
-            import polars as pl
-
             self.catalog = pl.DataFrame()
             return
 
