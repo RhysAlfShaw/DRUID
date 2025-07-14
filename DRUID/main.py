@@ -9,6 +9,7 @@ import numpy as np
 import astropy
 from multiprocessing import Pool
 import polars as pl
+import time
 
 
 from .src import utils
@@ -107,6 +108,7 @@ class sf:
         if self.verbose:
             print("Thresholding to find source islands...")
         # this function is rather slow.
+        t0 = time.time()
         source_islands = source.create_source_islands(
             self.image,
             self.background_map,
@@ -116,7 +118,9 @@ class sf:
             area_limit=self.area_limit,
             verbose=self.verbose,
         )
-
+        t1 = time.time()
+        print(f"Thresholding took {t1 - t0:.2f} seconds.")
+        t0 = time.time()
         if self.verbose:
             print(
                 f"Found {len(source_islands['positions'])} source islands in the image with area limit {self.area_limit}."
@@ -135,9 +139,11 @@ class sf:
                 print(
                     f"Processing {len(images_to_process)} source islands in parallel. with {self.num_threads} threads."
                 )
-
+            print("images to process:", len(images_to_process))
+            batch_size = len(images_to_process) // self.num_threads
+            print(f"Batch size: {batch_size}")
             with Pool(self.num_threads) as p:
-                results = p.map(_worker, images_to_process)
+                results = p.map(_worker, images_to_process, chunksize=batch_size)
         else:
             results = []
             for image in images_to_process:
@@ -146,6 +152,9 @@ class sf:
         # combine the results catalogs to a single catalog
         if results:
             self.catalog = utils.combine_polars_catalogs(results)
+
+        t1 = time.time()
+        print(f"Homology computation took {t1 - t0:.2f} seconds.")
 
     def set_background(
         self,
@@ -162,6 +171,7 @@ class sf:
         """
         if self.verbose:
             print("Calculating background map and RMS map...")
+        t0 = time.time()
         self.detection_threshold = detection_threshold
         self.analysis_threshold = analysis_threshold
 
@@ -175,6 +185,8 @@ class sf:
                 kernel_size=3,
             )
         )
+        t1 = time.time()
+        print(f"Background calculation took {t1 - t0:.2f} seconds.")
 
         if self.verbose:
             print("Background map and RMS map calculated.")

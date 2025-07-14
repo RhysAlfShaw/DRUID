@@ -46,42 +46,63 @@ def create_source_islands(
     thresholded_image = np.where(
         image > background_map + analysis_threshold * background_rms_map, image, 0
     )
+    import time
 
+    t0 = time.time()
     labeled_image = label(thresholded_image > 0, connectivity=2)
+    t1 = time.time()
+    if verbose:
+        print(
+            f"Labeling connected components took {t1 - t0:.2f} seconds. Found {np.unique(labeled_image).size - 1} components."
+        )
+    t0 = time.time()
     properties = regionprops(labeled_image, intensity_image=thresholded_image)
-
+    t1 = time.time()
+    if verbose:
+        print(
+            f"Calculating region properties took {t1 - t0:.2f} seconds. Found {len(properties)} properties."
+        )
     # filter out components smaller than 5 pixels
     min_area = area_limit
+    t0 = time.time()
     filtered_labels = [prop.label for prop in properties if prop.area >= min_area]
-
+    t1 = time.time()
+    if verbose:
+        print(
+            f"Filtering components by area took {t1 - t0:.2f} seconds. Found {len(filtered_labels)} components after filtering."
+        )
+    t0 = time.time()
     filtered_labeled_image = np.zeros_like(labeled_image)
     for label_value in filtered_labels:
         filtered_labeled_image[labeled_image == label_value] = label_value
-
+    t1 = time.time()
+    if verbose:
+        print(
+            f"Creating filtered labeled image took {t1 - t0:.2f} seconds. Filtered image has {np.unique(filtered_labeled_image).size - 1} components."
+        )
     labeled_image = filtered_labeled_image
-
-    # for each label crop around it.
-    unique_labels = np.unique(labeled_image)
     components = []
     source_islands_positions = []
-    for label_value in tqdm(unique_labels):
-        if label_value == 0:
-            continue  # Skip the background label
-        component_mask = labeled_image == label_value
-        component = np.where(component_mask, thresholded_image, 0)
-        # crop around the component
-        y_indices, x_indices = np.where(component_mask)
+    t0 = time.time()
 
-        if len(x_indices) == 0 or len(y_indices) == 0:
-            continue
+    # Calculate properties for all labeled regions
 
-        x_min, x_max = np.min(x_indices), np.max(x_indices)
-        y_min, y_max = np.min(y_indices), np.max(y_indices)
-        component = component[y_min : y_max + 1, x_min : x_max + 1]
-        position = (y_min, x_min)
-        source_islands_positions.append(position)
-        components.append(component)
+    # We pass thresholded_image as intensity_image to get the actual pixel values
+    props = regionprops(labeled_image, intensity_image=thresholded_image)
 
+    for prop in props:
+        # prop.intensity_image is the cropped and masked component
+        components.append(prop.intensity_image)
+
+        # prop.bbox returns (min_row, min_col, max_row, max_col)
+        y_min, x_min, _, _ = prop.bbox
+        source_islands_positions.append((y_min, x_min))
+
+    t1 = time.time()
+    if verbose:
+        print(
+            f"Cropping components took {t1 - t0:.2f} seconds. Found {len(components)} source islands."
+        )
     source_islands = {
         "island_image": components,
         "positions": source_islands_positions,
@@ -177,7 +198,6 @@ def create_source_islands_optimized(
         total=len(filtered_props_df),
         disable=not verbose,
     ):
-        # Bounding box is (min_row, min_col, max_row, max_col)
         min_row, min_col, max_row, max_col = row.bbox
 
         # Slice the *original* image directly to get the intensities within the bounding box
