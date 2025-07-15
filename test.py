@@ -9,11 +9,11 @@ def create_dummy_image():
     import numpy as np
 
     # Create a dummy image with random data
-    data = np.random.normal(size=(10000, 10000)).astype(np.float32)
+    data = np.random.normal(size=(20000, 20000)).astype(np.float32)
     # add many bright sources
-    for _ in range(500):
-        x = np.random.randint(0, 10000)
-        y = np.random.randint(0, 10000)
+    for _ in range(10000):
+        x = np.random.randint(0, 20000)
+        y = np.random.randint(0, 20000)
         data[x, y] += np.random.uniform(500, 10000)
 
     # convolve the image with a Gaussian kernel to simulate a more realistic image
@@ -67,7 +67,13 @@ def main():
     create_dummy_image()  # Create a dummy image for testing
     image_path = "DRUID/temp/dummy_image.fits"
     # image_path = "/Users/rs17612/Documents/Optical_IR_Data/EUCLID/EUC_MER_BGSUB-MOSAIC-VIS_TILE101158277-BB647A_20240122T115602.395130Z_00.00.fits"
-    findmysource = sf(image=image_path, mode="optical", area_limit=5, num_threads=1)
+    findmysource = sf(
+        image=image_path,
+        mode="optical",
+        area_limit=5,
+        num_threads=1,
+        working_directory="DRUID/temp",
+    )
     findmysource.set_background()
     findmysource.phsf()
 

@@ -2,15 +2,15 @@ version = "1.0"
 
 import setproctitle
 
-
 setproctitle.setproctitle("DRUID")
 
 import numpy as np
 import astropy
-from multiprocessing import Pool
 import polars as pl
 import time
-
+import os
+from multiprocessing import Pool
+from tqdm import tqdm
 
 from .src import utils
 from .src import homology
@@ -60,6 +60,7 @@ class sf:
         smooth_sigma: float = 0,
         num_threads: int = 1,
         header: astropy.io.fits.header.Header = None,
+        working_directory: str = "DRUID/temp",
     ):
         """
 
@@ -93,6 +94,11 @@ class sf:
                 "Image must be a file path (str) or a NumPy array (np.ndarray)."
             )
 
+        # check if there are files in the working directory
+        if not os.path.exists(working_directory):
+            os.makedirs(working_directory)
+        self.working_directory = working_directory
+
     def phsf(self, lifetime_limit: float = 0.0, lifetime_limit_fraction: float = 2):
         """
         Runs the source findin algorithm on the image.
@@ -105,6 +111,7 @@ class sf:
                 "Background map and RMS map must be set before running source finding."
                 "Please call set_background() first. or assign them manually."
             )
+
         if self.verbose:
             print("Thresholding to find source islands...")
         # this function is rather slow.
@@ -133,21 +140,24 @@ class sf:
                 print("No source islands to process.")
             self.catalog = pl.DataFrame()
             return
+        print(self.num_threads)
 
-        if self.num_threads > 1:
-            if self.verbose:
-                print(
-                    f"Processing {len(images_to_process)} source islands in parallel. with {self.num_threads} threads."
-                )
-            print("images to process:", len(images_to_process))
-            batch_size = len(images_to_process) // self.num_threads
-            print(f"Batch size: {batch_size}")
-            with Pool(self.num_threads) as p:
-                results = p.map(_worker, images_to_process, chunksize=batch_size)
-        else:
-            results = []
-            for image in images_to_process:
-                results.append(_worker(image))
+        # if self.num_threads > 1:
+        #     if self.verbose:
+        #         print(
+        #             f"Processing {len(images_to_process)} source islands in parallel. with {self.num_threads} threads."
+        #         )
+        #     print("images to process:", len(images_to_process))
+        #     batch_size = len(images_to_process) // self.num_threads
+        #     print(f"Batch size: {batch_size}")
+        #     with Pool(self.num_threads) as p:
+        #         results = p.map(_worker, images_to_process, chunksize=batch_size)
+
+        # else:
+        print(f"Processing {len(images_to_process)} source islands sequentially.")
+        results = []
+        for image in tqdm(images_to_process):
+            results.append(homology.compute_homology(image))
 
         # combine the results catalogs to a single catalog
         if results:
@@ -169,22 +179,40 @@ class sf:
         Calculate the background map of the image.
         This is required before running the source finding algorithm.
         """
+        # Check if background maps already exist in the working directory.
+
         if self.verbose:
             print("Calculating background map and RMS map...")
         t0 = time.time()
         self.detection_threshold = detection_threshold
         self.analysis_threshold = analysis_threshold
 
-        self.background_map, self.background_rms_map = (
-            background.calculate_background_maps(
-                self.image,
-                bg_estimator=method,
-                box_size=box_size,
-                filter_size=(3, 3),
-                nsigma=detection_threshold,
-                kernel_size=3,
+        if os.path.exists(self.working_directory + "/background_map.npy"):
+            if os.path.exists(self.working_directory + "/background_rms_map.npy"):
+                if self.verbose:
+                    print(
+                        "Background map and RMS map already exist. Loading from disk."
+                    )
+                self.background_map = np.load(
+                    self.working_directory + "/background_map.npy"
+                )
+                self.background_rms_map = np.load(
+                    self.working_directory + "/background_rms_map.npy"
+                )
+
+        else:
+            if self.verbose:
+                print("Calculating background map and RMS map from image.")
+            self.background_map, self.background_rms_map = (
+                background.calculate_background_maps(
+                    self.image,
+                    bg_estimator=method,
+                    box_size=box_size,
+                    filter_size=(3, 3),
+                    nsigma=detection_threshold,
+                    kernel_size=3,
+                )
             )
-        )
         t1 = time.time()
         print(f"Background calculation took {t1 - t0:.2f} seconds.")
 

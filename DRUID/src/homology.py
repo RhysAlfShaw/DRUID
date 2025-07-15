@@ -324,9 +324,9 @@ def compute_homology(
     # filter out components with lifetime less than 3
 
     polar_df = polar_df.filter(polar_df["lifetime"] > lifetime_limit_fraction)
-    print(
-        f"Filtered polar dataframe to {len(polar_df)} components with lifetime > {lifetime_limit_fraction}."
-    )
+    # print(
+    #     f"Filtered polar dataframe to {len(polar_df)} components with lifetime > {lifetime_limit_fraction}."
+    # )
 
     # set the longest lifetime rows death to 0.
     polar_df = polar_df.with_columns(

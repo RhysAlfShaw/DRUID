@@ -62,35 +62,12 @@ def create_source_islands(
         print(
             f"Calculating region properties took {t1 - t0:.2f} seconds. Found {len(properties)} properties."
         )
-    # filter out components smaller than 5 pixels
-    min_area = area_limit
-    t0 = time.time()
-    filtered_labels = [prop.label for prop in properties if prop.area >= min_area]
-    t1 = time.time()
-    if verbose:
-        print(
-            f"Filtering components by area took {t1 - t0:.2f} seconds. Found {len(filtered_labels)} components after filtering."
-        )
-    t0 = time.time()
-    filtered_labeled_image = np.zeros_like(labeled_image)
-    for label_value in filtered_labels:
-        filtered_labeled_image[labeled_image == label_value] = label_value
-    t1 = time.time()
-    if verbose:
-        print(
-            f"Creating filtered labeled image took {t1 - t0:.2f} seconds. Filtered image has {np.unique(filtered_labeled_image).size - 1} components."
-        )
-    labeled_image = filtered_labeled_image
     components = []
     source_islands_positions = []
-    t0 = time.time()
-
-    # Calculate properties for all labeled regions
-
-    # We pass thresholded_image as intensity_image to get the actual pixel values
-    props = regionprops(labeled_image, intensity_image=thresholded_image)
-
-    for prop in props:
+    min_area = area_limit
+    for prop in properties:
+        if prop.area < min_area:
+            continue
         # prop.intensity_image is the cropped and masked component
         components.append(prop.intensity_image)
 
