@@ -9,11 +9,13 @@ def create_dummy_image(working_directory="DRUID/temp"):
     import numpy as np
 
     # Create a dummy image with random data
-    data = np.random.normal(size=(20000, 20000)).astype(np.float32)
+    dim = 10_000  # 20,000 x 20,000 pixels
+    n_sources = 50_000  # Number of bright sources to add
+    data = np.random.normal(size=(dim, dim)).astype(np.float32)
     # add many bright sources
-    for _ in range(100000):
-        x = np.random.randint(0, 20000)
-        y = np.random.randint(0, 20000)
+    for _ in range(n_sources):
+        x = np.random.randint(0, dim)
+        y = np.random.randint(0, dim)
         data[x, y] += np.random.uniform(500, 10000)
 
     # convolve the image with a Gaussian kernel to simulate a more realistic image
@@ -76,6 +78,7 @@ def main():
         area_limit=5,
         num_threads=10,
         working_directory=working_dir,
+        cashe=False,
     )
     findmysource.set_background()
     findmysource.phsf()

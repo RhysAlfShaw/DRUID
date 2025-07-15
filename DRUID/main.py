@@ -12,7 +12,6 @@ import os
 # Especially for multithreaded homology computation. otherwise we will spawn nested threads.
 os.environ["POLARS_MAX_THREADS"] = "1"
 import polars as pl
-
 import time
 
 from multiprocessing import get_context
@@ -23,8 +22,15 @@ from .src import homology
 from .src import background
 from .src import source
 
-DRUID_MESSAGE = """                 
-#############################################
+RED = "\033[91m"
+GREEN = "\033[92m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+DRUID_MESSAGE = rf"""  
+
+{RED}#############################################{RESET}
+{GREEN}
 _______   _______          _________ ______  
 (  __  \ (  ____ )|\     /|\__   __/(  __  \ 
 | (  \  )| (    )|| )   ( |   ) (   | (  \  )
@@ -34,18 +40,16 @@ _______   _______          _________ ______
 | (__/  )| ) \ \__| (___) |___) (___| (__/  )
 (______/ |/   \__/(_______)\_______/(______/ 
         
-        
-#############################################
+{RESET}
+{RED}#############################################{RESET}
 
-Detector of astRonomical soUrces in optIcal and raDio images
+{BOLD}Detector of astRonomical soUrces in optIcal and raDio images{RESET}
 
-Version: {}
+Version: {version}
 
 For more information see:
-https://github.com/RhysAlfShaw/DRUID
-        """.format(
-    version
-)
+{BLUE}https://github.com/RhysAlfShaw/DRUID{RESET}
+"""
 
 
 def _worker(image: np.ndarray) -> "pl.DataFrame":
@@ -66,6 +70,7 @@ class sf:
         num_threads: int = 1,
         header: astropy.io.fits.header.Header = None,
         working_directory: str = "DRUID/temp",
+        cashe: bool = False,
     ):
         """
 
@@ -81,6 +86,7 @@ class sf:
         self.smooth_sigma = smooth_sigma
         self.num_threads = num_threads
         self.header = header
+        self.cashe = cashe
 
         if image is None:
             raise ValueError(
@@ -100,9 +106,12 @@ class sf:
             )
 
         # check if there are files in the working directory
-        if not os.path.exists(working_directory):
-            os.makedirs(working_directory)
-        self.working_directory = working_directory
+        if self.cashe:
+            if not os.path.exists(working_directory):
+                os.makedirs(working_directory)
+            self.working_directory = working_directory
+        else:
+            self.working_directory = None
 
     def phsf(self, lifetime_limit: float = 0.0, lifetime_limit_fraction: float = 2):
         """
@@ -193,18 +202,19 @@ class sf:
         self.detection_threshold = detection_threshold
         self.analysis_threshold = analysis_threshold
 
-        if os.path.exists(self.working_directory + "/background_map.npy"):
-            if os.path.exists(self.working_directory + "/background_rms_map.npy"):
-                if self.verbose:
-                    print(
-                        "Background map and RMS map already exist. Loading from disk."
+        if self.cashe:
+            if os.path.exists(self.working_directory + "/background_map.npy"):
+                if os.path.exists(self.working_directory + "/background_rms_map.npy"):
+                    if self.verbose:
+                        print(
+                            "Background map and RMS map already exist. Loading from disk."
+                        )
+                    self.background_map = np.load(
+                        self.working_directory + "/background_map.npy"
                     )
-                self.background_map = np.load(
-                    self.working_directory + "/background_map.npy"
-                )
-                self.background_rms_map = np.load(
-                    self.working_directory + "/background_rms_map.npy"
-                )
+                    self.background_rms_map = np.load(
+                        self.working_directory + "/background_rms_map.npy"
+                    )
 
         else:
             if self.verbose:
@@ -219,12 +229,16 @@ class sf:
                     kernel_size=3,
                 )
             )
-            # Save the background maps to disk for future use.
-            np.save(self.working_directory + "/background_map.npy", self.background_map)
-            np.save(
-                self.working_directory + "/background_rms_map.npy",
-                self.background_rms_map,
-            )
+
+            if self.cashe:
+                # Save the background maps to disk for future use.
+                np.save(
+                    self.working_directory + "/background_map.npy", self.background_map
+                )
+                np.save(
+                    self.working_directory + "/background_rms_map.npy",
+                    self.background_rms_map,
+                )
         t1 = time.time()
         print(f"Background calculation took {t1 - t0:.2f} seconds.")
 
