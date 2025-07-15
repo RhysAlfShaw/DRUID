@@ -6,17 +6,22 @@ setproctitle.setproctitle("DRUID")
 
 import numpy as np
 import astropy
-import polars as pl
-import time
 import os
-from multiprocessing import Pool
+
+# this prevent polars from using all available threads.
+# Especially for multithreaded homology computation. otherwise we will spawn nested threads.
+os.environ["POLARS_MAX_THREADS"] = "1"
+import polars as pl
+
+import time
+
+from multiprocessing import get_context
 from tqdm import tqdm
 
 from .src import utils
 from .src import homology
 from .src import background
 from .src import source
-
 
 DRUID_MESSAGE = """                 
 #############################################
@@ -142,24 +147,25 @@ class sf:
             return
         print(self.num_threads)
 
-        # if self.num_threads > 1:
-        #     if self.verbose:
-        #         print(
-        #             f"Processing {len(images_to_process)} source islands in parallel. with {self.num_threads} threads."
-        #         )
-        #     print("images to process:", len(images_to_process))
-        #     batch_size = len(images_to_process) // self.num_threads
-        #     print(f"Batch size: {batch_size}")
-        #     with Pool(self.num_threads) as p:
-        #         results = p.map(_worker, images_to_process, chunksize=batch_size)
+        if self.num_threads > 1:
+            if self.verbose:
+                print(
+                    f"Processing {len(images_to_process)} source islands in parallel. with {self.num_threads} threads."
+                )
+            print("images to process:", len(images_to_process))
+            batch_size = len(images_to_process) // self.num_threads
+            print(f"Batch size: {batch_size}")
+            with get_context("spawn").Pool(self.num_threads) as p:
+                results = p.map(_worker, images_to_process, chunksize=batch_size)
 
-        # else:
-        print(f"Processing {len(images_to_process)} source islands sequentially.")
-        results = []
-        for image in tqdm(images_to_process):
-            results.append(homology.compute_homology(image))
+        else:
+            print(f"Processing {len(images_to_process)} source islands sequentially.")
+            results = []
+            for image in tqdm(images_to_process):
+                results.append(homology.compute_homology(image))
 
-        # combine the results catalogs to a single catalog
+            # combine the results catalogs to a single catalog
+
         if results:
             self.catalog = utils.combine_polars_catalogs(results)
 

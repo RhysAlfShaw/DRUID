@@ -1,7 +1,7 @@
 from DRUID import sf
 
 
-def create_dummy_image():
+def create_dummy_image(working_directory="DRUID/temp"):
     """
     Create a dummy FITS image for testing purposes.
     """
@@ -11,7 +11,7 @@ def create_dummy_image():
     # Create a dummy image with random data
     data = np.random.normal(size=(20000, 20000)).astype(np.float32)
     # add many bright sources
-    for _ in range(10000):
+    for _ in range(100000):
         x = np.random.randint(0, 20000)
         y = np.random.randint(0, 20000)
         data[x, y] += np.random.uniform(500, 10000)
@@ -23,7 +23,7 @@ def create_dummy_image():
 
     # Create a FITS file
     hdu = fits.PrimaryHDU(data)
-    hdu.writeto("DRUID/temp/dummy_image.fits", overwrite=True)
+    hdu.writeto(f"{working_directory}/dummy_image.fits", overwrite=True)
 
     # # plot the image to verify
     # import matplotlib.pyplot as plt
@@ -64,15 +64,18 @@ def create_dummy_image():
 
 
 def main():
-    create_dummy_image()  # Create a dummy image for testing
-    image_path = "DRUID/temp/dummy_image.fits"
+    working_dir = "/data/typhon2/Rhys/data/DRUID_TEST"
+    create_dummy_image(
+        working_directory=working_dir
+    )  # Create a dummy image for testing
+    image_path = f"{working_dir}/dummy_image.fits"
     # image_path = "/Users/rs17612/Documents/Optical_IR_Data/EUCLID/EUC_MER_BGSUB-MOSAIC-VIS_TILE101158277-BB647A_20240122T115602.395130Z_00.00.fits"
     findmysource = sf(
         image=image_path,
         mode="optical",
         area_limit=5,
-        num_threads=1,
-        working_directory="DRUID/temp",
+        num_threads=10,
+        working_directory=working_dir,
     )
     findmysource.set_background()
     findmysource.phsf()
