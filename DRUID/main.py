@@ -213,6 +213,12 @@ class sf:
                     kernel_size=3,
                 )
             )
+            # Save the background maps to disk for future use.
+            np.save(self.working_directory + "/background_map.npy", self.background_map)
+            np.save(
+                self.working_directory + "/background_rms_map.npy",
+                self.background_rms_map,
+            )
         t1 = time.time()
         print(f"Background calculation took {t1 - t0:.2f} seconds.")
 
