@@ -313,7 +313,7 @@ def compute_homology(
         [(-polar_df["birth"]).alias("birth"), (-polar_df["death"]).alias("death")]
     )
     # set the death column to atleast the analysis threshold value
-    print(analysis_threshold)
+    # print(analysis_threshold)
     polar_df = polar_df.with_columns(
         pl.when(pl.col("death") < analysis_threshold)
         .then(pl.lit(analysis_threshold))
@@ -443,7 +443,7 @@ def compute_homology(
         for contour in contours
     ]
     polar_df = polar_df.with_columns(pl.Series("contour", contours))
-    print(f"Computed {len(polar_df)} components with contours.")
+    # print(f"Computed {len(polar_df)} components with contours.")
     return polar_df
 
 
