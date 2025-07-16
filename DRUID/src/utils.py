@@ -20,6 +20,12 @@ def get_image_from_path(image_path):
     with fits.open(image_path) as hdul:
         image = hdul[0].data
 
+    # warn if the image is not 2D
+    # reduce the image to 2D if it is not
+    if image.ndim == 3:
+        image = image[0, :, :]
+    elif image.ndim == 4:
+        image = image[0, 0, :, :]
     return image
 
 
