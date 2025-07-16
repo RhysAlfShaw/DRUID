@@ -215,6 +215,29 @@ class sf:
                     self.background_rms_map = np.load(
                         self.working_directory + "/background_rms_map.npy"
                     )
+            else:
+                if self.verbose:
+                    print(
+                        "Background map and RMS map do not exist. Calculating from image."
+                    )
+                self.background_map, self.background_rms_map = (
+                    background.calculate_background_maps(
+                        self.image,
+                        bg_estimator=method,
+                        box_size=box_size,
+                        filter_size=filter_size,
+                        nsigma=detection_threshold,
+                        kernel_size=kernel_size,
+                    )
+                )
+                # Save the background maps to disk for future use.
+                np.save(
+                    self.working_directory + "/background_map.npy", self.background_map
+                )
+                np.save(
+                    self.working_directory + "/background_rms_map.npy",
+                    self.background_rms_map,
+                )
 
         else:
             if self.verbose:
