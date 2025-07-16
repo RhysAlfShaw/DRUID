@@ -268,6 +268,8 @@ def get_mask_CPU(x1, y1, Birth, Death, img):
 
 def compute_homology(
     img: np.ndarray,
+    analysis_threshold: float,
+    lifetime_limit: float = None,
     lifetime_limit_fraction: float = 1.0,
     area_size_threshold: int = 2,
 ) -> pl.DataFrame:
@@ -306,27 +308,33 @@ def compute_homology(
     # drop cols dim, z1, z2
     polar_df = polar_df.drop(["dim", "z1", "z2"])
     # create ne column lifetime death - birth
-    polar_df = polar_df.with_columns(
-        (polar_df["death"] - polar_df["birth"]).alias("lifetime")
-    )
     # make column birth and death - birth and death.
     polar_df = polar_df.with_columns(
         [(-polar_df["birth"]).alias("birth"), (-polar_df["death"]).alias("death")]
+    )
+    # set the death column to atleast the analysis threshold value
+    print(analysis_threshold)
+    polar_df = polar_df.with_columns(
+        pl.when(pl.col("death") < analysis_threshold)
+        .then(pl.lit(analysis_threshold))
+        .otherwise(pl.col("death"))
+        .alias("death")
+    )
+
+    polar_df = polar_df.with_columns(
+        (abs(polar_df["death"] - polar_df["birth"])).alias("lifetime")
     )
 
     # lifetime_threshold. this is setby the user.
 
     polar_df = polar_df.with_columns(
-        (polar_df["birth"] - polar_df["death"]).alias("lifetimeFrac")
+        (polar_df["birth"] / polar_df["death"]).alias("lifetimeFrac")
     )
-    # liftetime_limit_fraction = 1.0  # set the lifetime limit fraction
 
     # filter out components with lifetime less than 3
 
-    polar_df = polar_df.filter(polar_df["lifetime"] > lifetime_limit_fraction)
-    # print(
-    #     f"Filtered polar dataframe to {len(polar_df)} components with lifetime > {lifetime_limit_fraction}."
-    # )
+    polar_df = polar_df.filter(polar_df["lifetimeFrac"] > lifetime_limit_fraction)
+    polar_df = polar_df.filter(polar_df["lifetime"] > lifetime_limit)
 
     # set the longest lifetime rows death to 0.
     polar_df = polar_df.with_columns(
@@ -435,7 +443,7 @@ def compute_homology(
         for contour in contours
     ]
     polar_df = polar_df.with_columns(pl.Series("contour", contours))
-
+    print(f"Computed {len(polar_df)} components with contours.")
     return polar_df
 
 
@@ -507,7 +515,7 @@ if __name__ == "__main__":
     # Where the img cut out is used for the computation of the persistent homology.
     # We will use the first component for now.
 
-    img = components[0]
+    img = components[2]
     polar_df = compute_homology(img)
     print("Contours computed.")
     print(polar_df)
@@ -524,4 +532,5 @@ if __name__ == "__main__":
                 contour[:, 1], contour[:, 0], color="red", alpha=0.5, linewidth=5
             )  # Plot y, x for correct orientation
     plt.colorbar()
+    plt.savefig("DRUID/temp/component_with_contours.png")
     plt.show()

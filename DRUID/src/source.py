@@ -64,6 +64,8 @@ def create_source_islands(
         )
     components = []
     source_islands_positions = []
+    source_island_bg_rms = []
+    source_island_bg = []
     min_area = area_limit
     for prop in properties:
         if prop.area < min_area:
@@ -74,15 +76,25 @@ def create_source_islands(
         # prop.bbox returns (min_row, min_col, max_row, max_col)
         y_min, x_min, _, _ = prop.bbox
         source_islands_positions.append((y_min, x_min))
+        # Get the background and RMS values for the component
+        source_island_bg.append(
+            background_map[y_min : prop.bbox[2], x_min : prop.bbox[3]].mean()
+        )
+        source_island_bg_rms.append(
+            background_rms_map[y_min : prop.bbox[2], x_min : prop.bbox[3]].mean()
+        )
 
     t1 = time.time()
     if verbose:
         print(
             f"Cropping components took {t1 - t0:.2f} seconds. Found {len(components)} source islands."
         )
+
     source_islands = {
         "island_image": components,
         "positions": source_islands_positions,
+        "background": source_island_bg,
+        "background_rms": source_island_bg_rms,
     }
 
     return source_islands

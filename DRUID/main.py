@@ -21,6 +21,7 @@ from .src import utils
 from .src import homology
 from .src import background
 from .src import source
+from functools import partial
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -52,11 +53,25 @@ For more information see:
 """
 
 
-def _worker(image: np.ndarray) -> "pl.DataFrame":
+def _worker(
+    iterable_image, analysis_threshold, lifetime_limit, lifetime_limit_fraction
+) -> "pl.DataFrame":
     """
     Worker function to compute homology for a single source island.
     """
-    return homology.compute_homology(image)
+    image, position, background, background_rms = iterable_image
+    cat = homology.compute_homology(
+        image,
+        analysis_threshold=analysis_threshold * background_rms,
+        lifetime_limit=lifetime_limit,
+        lifetime_limit_fraction=lifetime_limit_fraction,
+    )
+    # Add position to the catalog
+    cat = cat.with_columns(
+        pl.lit(position[0]).alias("Island_X"),
+        pl.lit(position[1]).alias("Island_Y"),
+    )
+    return cat
 
 
 class sf:
@@ -113,7 +128,7 @@ class sf:
         else:
             self.working_directory = None
 
-    def phsf(self, lifetime_limit: float = 0.0, lifetime_limit_fraction: float = 2):
+    def phsf(self, lifetime_limit: float = 0.0, lifetime_limit_fraction: float = 1):
         """
         Runs the source findin algorithm on the image.
 
@@ -156,6 +171,14 @@ class sf:
             return
         print(self.num_threads)
 
+        # make the iterable images_to_process and poistions
+        iterable_images = zip(
+            images_to_process,
+            source_islands["positions"],
+            source_islands["background"],
+            source_islands["background_rms"],
+        )
+
         if self.num_threads > 1:
             if self.verbose:
                 print(
@@ -165,13 +188,27 @@ class sf:
             batch_size = len(images_to_process) // self.num_threads
             print(f"Batch size: {batch_size}")
             with get_context("spawn").Pool(self.num_threads) as p:
-                results = p.map(_worker, images_to_process, chunksize=batch_size)
+                # Use functools.partial to pass additional arguments to _worker
+                worker_func = partial(
+                    _worker,  # analysis threshold * rms at this point.
+                    analysis_threshold=self.analysis_threshold,
+                    lifetime_limit=lifetime_limit,
+                    lifetime_limit_fraction=lifetime_limit_fraction,
+                )
+                results = p.map(worker_func, iterable_images, chunksize=batch_size)
 
         else:
             print(f"Processing {len(images_to_process)} source islands sequentially.")
             results = []
-            for image in tqdm(images_to_process):
-                results.append(homology.compute_homology(image))
+            for img, position, background, background_rms in tqdm(iterable_images):
+                results.append(
+                    _worker(
+                        (img, position, background, background_rms),
+                        self.analysis_threshold,
+                        lifetime_limit,
+                        lifetime_limit_fraction,
+                    )
+                )
 
             # combine the results catalogs to a single catalog
 
