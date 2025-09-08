@@ -76,7 +76,8 @@ def correct_first_destruction_pl(df: pl.DataFrame) -> pl.DataFrame:
     if "new_row" not in df.columns:
         df = df.with_columns(pl.lit(0, dtype=pl.Int8).alias("new_row"))
 
-    # 1. Filter the DataFrame to find all rows that have enclosed islands.
+    # 1. Filter the DataFrame to find all rows that have enclosed islands
+
     islands_to_split = df.filter(pl.col("encloses").list.len() > 1)
 
     # If no such rows exist, return the original DataFrame.
@@ -95,6 +96,7 @@ def correct_first_destruction_pl(df: pl.DataFrame) -> pl.DataFrame:
         # Suffix prevents column name collisions ('Death' becomes 'Death_parent')
         suffix="_parent",
     )
+    print("New Rows Base: ", new_rows_base)
 
     # If the join results in an empty DataFrame, return the original.
     if new_rows_base.is_empty():
@@ -118,13 +120,13 @@ def correct_first_destruction_pl(df: pl.DataFrame) -> pl.DataFrame:
             # Overwrite the original ID with the new unique ID
             ID=new_ids,
             # Update 'Death' with the value from the joined parent
-            Death=pl.col("death_parent"),
+            death=pl.col("death_parent"),
             # Set 'parent_tag' to the ID of the parent island
             parent_tag=pl.col("ID_parent"),
             # Mark this as a newly generated row
             new_row=pl.lit(1, dtype=pl.Int8),
             # Set 'enclosed_i' to an empty list
-            enclosed_i=pl.lit(None, dtype=df.schema["encloses"]),
+            encloses=pl.lit(None, dtype=df.schema["encloses"]),
         )
         # Remove temporary columns created by the join
         .drop(["ID_parent", "death_parent"])
