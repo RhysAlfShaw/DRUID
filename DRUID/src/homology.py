@@ -77,8 +77,13 @@ def correct_first_destruction_pl(df: pl.DataFrame) -> pl.DataFrame:
         df = df.with_columns(pl.lit(0, dtype=pl.Int8).alias("new_row"))
 
     # 1. Filter the DataFrame to find all rows that have enclosed islands
-
-    islands_to_split = df.filter(pl.col("encloses").list.len() > 1)
+    # print(df)
+    try:
+        islands_to_split = df.filter(pl.col("encloses").list.len() > 1)
+    except Exception as e:
+        print("Error filtering islands to split:", e)
+        print(df)
+        # exit(1)
 
     # If no such rows exist, return the original DataFrame.
     if islands_to_split.is_empty():
@@ -96,7 +101,6 @@ def correct_first_destruction_pl(df: pl.DataFrame) -> pl.DataFrame:
         # Suffix prevents column name collisions ('Death' becomes 'Death_parent')
         suffix="_parent",
     )
-    print("New Rows Base: ", new_rows_base)
 
     # If the join results in an empty DataFrame, return the original.
     if new_rows_base.is_empty():
@@ -399,6 +403,10 @@ def compute_homology(
     # area size filter.
     area_size_threshold = 2  # replace with argument #### TODO ####
     polar_df = polar_df.filter(polar_df["area"] > area_size_threshold)
+    init_df = polar_df.clone()
+    # if after the area size filter there are no components return empty df
+    if polar_df.is_empty():
+        return None
 
     # assign an ID to each point in the polar_df
     polar_df = polar_df.with_columns(pl.Series("ID", range(len(polar_df))))
@@ -421,7 +429,13 @@ def compute_homology(
     )
 
     # correct first destruction
+    # try:
     polar_df = correct_first_destruction_pl(polar_df)
+    # except Exception as e:
+    #     print("Error correcting first destruction:", e)
+    #     print(init_df)
+    #     plt.imshow(img)
+    #     plt.show()
     # assign parent tags
     polar_df = parent_tag_func_pl(polar_df)
     contours = []
@@ -443,6 +457,8 @@ def compute_homology(
     ]
     polar_df = polar_df.with_columns(pl.Series("contour", contours))
     # print(f"Computed {len(polar_df)} components with contours.")
+    # print(len(polar_df.columns))
+    # print(polar_df.columns)
     return polar_df
 
 

@@ -67,6 +67,8 @@ def _worker(
         lifetime_limit_fraction=lifetime_limit_fraction,
     )
     # Add position to the catalog
+    if cat is None or cat.is_empty():
+        return None
     cat = cat.with_columns(
         pl.lit(position[0]).alias("Island_X"),
         pl.lit(position[1]).alias("Island_Y"),
@@ -169,7 +171,6 @@ class sf:
                 print("No source islands to process.")
             self.catalog = pl.DataFrame()
             return
-        print(self.num_threads)
 
         # make the iterable images_to_process and poistions
         iterable_images = zip(
@@ -197,6 +198,7 @@ class sf:
                     lifetime_limit=lifetime_limit,
                     lifetime_limit_fraction=lifetime_limit_fraction,
                 )
+                # print(iterable_images)
                 results = p.map(worker_func, iterable_images, chunksize=batch_size)
 
         else:
@@ -215,6 +217,8 @@ class sf:
             # combine the results catalogs to a single catalog
 
         if results:
+            # remove any None results
+            results = [res for res in results if res is not None]
             self.catalog = utils.combine_polars_catalogs(results)
 
         t1 = time.time()
