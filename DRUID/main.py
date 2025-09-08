@@ -186,6 +186,8 @@ class sf:
                 )
             print("images to process:", len(images_to_process))
             batch_size = len(images_to_process) // self.num_threads
+            if batch_size < 1:  # prevent batch size of 0
+                batch_size = 1
             print(f"Batch size: {batch_size}")
             with get_context("spawn").Pool(self.num_threads) as p:
                 # Use functools.partial to pass additional arguments to _worker
