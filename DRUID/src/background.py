@@ -44,7 +44,9 @@ def make_source_mask(data, nsigma=3.0, kernel_size=3):
 
     # Detect sources using a simple thresholding method can add masked pixels e.g. known bad areas of image.
     segm = detect_sources(data, threshold, npixels=kernel_size**2)
-
+    if segm is None:
+        # No sources detected, return an empty mask
+        return np.zeros(data.shape, dtype=bool)
     # Create a mask from the segmentation map
     mask = segm.data > 0
 
