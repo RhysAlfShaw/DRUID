@@ -223,29 +223,26 @@ def get_enclosing_mask_CPU(x, y, mask):
 
     labeled_mask, num_features = scipy_label(mask)
 
-    # Check if the specified pixel is within the mask
+    # check if the specified pixel is within the mask
     if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0]:
         label_at_pixel = labeled_mask[y, x]
 
         if label_at_pixel != 0:
-            # Extract the connected component containing the specified pixel
+            # get the connected component containing the specified pixel
             component_mask = labeled_mask == label_at_pixel
             return component_mask
         else:
-            # The specified pixel is not part of any connected component
+            # the specified pixel is not part of any connected component
             return None
     else:
-        # The specified pixel is outside the mask
+        # the specified pixel is outside the mask
         return None
 
 
 def bounding_box_cpu(mask):
-    # Get the indices of elements that are True
     rows, cols = np.where(mask)
-    # Get the minimum and maximum x and y coordinates
     min_y, max_y = np.min(rows), np.max(rows)
     min_x, max_x = np.min(cols), np.max(cols)
-    # Return the bounding box as a tuple of tuples
     return min_y, min_x, max_y, max_x
 
 
