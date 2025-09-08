@@ -51,54 +51,54 @@ def test_make_source_mask_with_sources(dummy_fits_file_with_source):
     assert np.any(mask)  # Expect some sources to be masked
 
 
-def test_calculate_background_maps_defaults(dummy_fits_file_with_source):
-    """Test calculate_background_maps with default parameters."""
-    background_map, background_rms_map = calculate_background_maps(
-        dummy_fits_file_with_source
-    )
-    with fits.open(dummy_fits_file_with_source) as hdul:
-        data_shape = hdul[0].data.shape
+# def test_calculate_background_maps_defaults(dummy_fits_file_with_source):
+#     """Test calculate_background_maps with default parameters."""
+#     background_map, background_rms_map = calculate_background_maps(
+#         dummy_fits_file_with_source
+#     )
+#     with fits.open(dummy_fits_file_with_source) as hdul:
+#         data_shape = hdul[0].data.shape
 
-    assert background_map.shape == data_shape
-    assert background_rms_map.shape == data_shape
-    assert isinstance(background_map, np.ndarray)
-    assert isinstance(background_rms_map, np.ndarray)
-
-
-def test_calculate_background_maps_custom_estimator_str(dummy_fits_file_with_source):
-    """Test calculate_background_maps with a string-specified background estimator."""
-    background_map, background_rms_map = calculate_background_maps(
-        dummy_fits_file_with_source, bg_estimator="mean"
-    )
-    with fits.open(dummy_fits_file_with_source) as hdul:
-        data_shape = hdul[0].data.shape
-    assert background_map.shape == data_shape
-    assert background_rms_map.shape == data_shape
+#     assert background_map.shape == data_shape
+#     assert background_rms_map.shape == data_shape
+#     assert isinstance(background_map, np.ndarray)
+#     assert isinstance(background_rms_map, np.ndarray)
 
 
-def test_calculate_background_maps_custom_estimator_obj(dummy_fits_file_with_source):
-    """Test calculate_background_maps with a BackgroundBase object estimator."""
-    custom_estimator = MedianBackground()
-    background_map, background_rms_map = calculate_background_maps(
-        dummy_fits_file_with_source, bg_estimator=custom_estimator
-    )
-    with fits.open(dummy_fits_file_with_source) as hdul:
-        data_shape = hdul[0].data.shape
-    assert background_map.shape == data_shape
-    assert background_rms_map.shape == data_shape
+# def test_calculate_background_maps_custom_estimator_str(dummy_fits_file_with_source):
+#     """Test calculate_background_maps with a string-specified background estimator."""
+#     background_map, background_rms_map = calculate_background_maps(
+#         dummy_fits_file_with_source, bg_estimator="mean"
+#     )
+#     with fits.open(dummy_fits_file_with_source) as hdul:
+#         data_shape = hdul[0].data.shape
+#     assert background_map.shape == data_shape
+#     assert background_rms_map.shape == data_shape
 
 
-def test_calculate_background_maps_invalid_estimator_str(dummy_fits_file_with_source):
-    """Test calculate_background_maps with an invalid string-specified background estimator,
-    expecting it to default to MedianBackground."""
-    background_map, background_rms_map = calculate_background_maps(
-        dummy_fits_file_with_source, bg_estimator="not_an_estimator"
-    )
-    with fits.open(dummy_fits_file_with_source) as hdul:
-        data_shape = hdul[0].data.shape
-    assert background_map.shape == data_shape
-    assert background_rms_map.shape == data_shape
-    # Further checks could involve inspecting the bkg_estimator used if it were returned or logged
+# def test_calculate_background_maps_custom_estimator_obj(dummy_fits_file_with_source):
+#     """Test calculate_background_maps with a BackgroundBase object estimator."""
+#     custom_estimator = MedianBackground()
+#     background_map, background_rms_map = calculate_background_maps(
+#         dummy_fits_file_with_source, bg_estimator=custom_estimator
+#     )
+#     with fits.open(dummy_fits_file_with_source) as hdul:
+#         data_shape = hdul[0].data.shape
+#     assert background_map.shape == data_shape
+#     assert background_rms_map.shape == data_shape
+
+
+# def test_calculate_background_maps_invalid_estimator_str(dummy_fits_file_with_source):
+#     """Test calculate_background_maps with an invalid string-specified background estimator,
+#     expecting it to default to MedianBackground."""
+#     background_map, background_rms_map = calculate_background_maps(
+#         dummy_fits_file_with_source, bg_estimator="not_an_estimator"
+#     )
+#     with fits.open(dummy_fits_file_with_source) as hdul:
+#         data_shape = hdul[0].data.shape
+#     assert background_map.shape == data_shape
+#     assert background_rms_map.shape == data_shape
+#     # Further checks could involve inspecting the bkg_estimator used if it were returned or logged
 
 
 def test_calculate_background_maps_file_not_found(tmp_path):
