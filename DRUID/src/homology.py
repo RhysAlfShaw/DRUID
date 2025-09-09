@@ -43,7 +43,6 @@ def classify_single(row):
         Class: int - the Class integer that indiceates the class the row belongs too.
 
     """
-    # print(row)
     if row["new_row"] == 0:
         if len(row["encloses"]) == 0:  # no children
             if np.isnan(row["parent_tag"]):  # no parent
@@ -78,12 +77,8 @@ def correct_first_destruction_pl(df: pl.DataFrame) -> pl.DataFrame:
 
     # 1. Filter the DataFrame to find all rows that have enclosed islands
     # print(df)
-    try:
-        islands_to_split = df.filter(pl.col("encloses").list.len() > 1)
-    except Exception as e:
-        print("Error filtering islands to split:", e)
-        print(df)
-        # exit(1)
+
+    islands_to_split = df.filter(pl.col("encloses").list.len() > 1)
 
     # If no such rows exist, return the original DataFrame.
     if islands_to_split.is_empty():
@@ -429,13 +424,7 @@ def compute_homology(
     )
 
     # correct first destruction
-    # try:
     polar_df = correct_first_destruction_pl(polar_df)
-    # except Exception as e:
-    #     print("Error correcting first destruction:", e)
-    #     print(init_df)
-    #     plt.imshow(img)
-    #     plt.show()
     # assign parent tags
     polar_df = parent_tag_func_pl(polar_df)
     contours = []
@@ -456,9 +445,7 @@ def compute_homology(
         for contour in contours
     ]
     polar_df = polar_df.with_columns(pl.Series("contour", contours))
-    # print(f"Computed {len(polar_df)} components with contours.")
-    # print(len(polar_df.columns))
-    # print(polar_df.columns)
+
     return polar_df
 
 
