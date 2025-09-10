@@ -21,6 +21,7 @@ from .src import utils
 from .src import homology
 from .src import background
 from .src import source
+from .src import properties
 from functools import partial
 
 RED = "\033[91m"
@@ -66,6 +67,19 @@ def _worker(
         lifetime_limit=lifetime_limit,
         lifetime_limit_fraction=lifetime_limit_fraction,
     )
+
+    # source characteristics measure here!
+    if cat is not None and not cat.is_empty():
+        # Add source characteristics to the catalog
+        cat = properties.calculate_properties(
+            cat,
+            image,
+            background,
+            background_rms,
+            position,
+            analysis_threshold,
+        )
+
     # Add position to the catalog
     if cat is None or cat.is_empty():
         return None

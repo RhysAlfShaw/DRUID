@@ -6,14 +6,15 @@ Date: 11-06-2025
 import cripser
 import numpy as np
 import polars as pl
+
 from scipy.ndimage import label as scipy_label
 from tqdm import tqdm
 from skimage import measure
+from astropy.io import fits
 
 # For testing and development purposes, we import the following libraries:
 import pandas as pd
 import matplotlib.pyplot as plt
-from astropy.io import fits
 
 
 def _get_polygons_CPU(x1, y1, birth, death, image: np.ndarray):
