@@ -12,6 +12,7 @@ import numpy as np
 from skimage.measure import regionprops, label, regionprops_table
 from tqdm import tqdm
 import pandas as pd  #
+import polars as pl
 
 
 def create_source_islands(
@@ -67,11 +68,13 @@ def create_source_islands(
     source_island_bg_rms = []
     source_island_bg = []
     min_area = area_limit
+    area = []
     for prop in properties:
         if prop.area < min_area:
             continue
+        area.append(prop.area)
         # prop.intensity_image is the cropped and masked component
-        components.append(prop.intensity_image)
+        components.append(np.array(prop.intensity_image))
 
         # prop.bbox returns (min_row, min_col, max_row, max_col)
         y_min, x_min, _, _ = prop.bbox
@@ -83,6 +86,11 @@ def create_source_islands(
         source_island_bg_rms.append(
             background_rms_map[y_min : prop.bbox[2], x_min : prop.bbox[3]].mean()
         )
+    import matplotlib.pyplot as plt
+
+    plt.hist(area)
+    plt.yscale("log")
+    plt.savefig("area_distribution.png")
 
     t1 = time.time()
     if verbose:
@@ -97,7 +105,29 @@ def create_source_islands(
         "background_rms": source_island_bg_rms,
     }
 
-    return source_islands
+    shuffled_islands = shuffle_in_unison(
+        [
+            source_islands["island_image"],
+            source_islands["positions"],
+            source_islands["background"],
+            source_islands["background_rms"],
+        ]
+    )
+    return shuffled_islands
+
+
+def shuffle_in_unison(arrays):
+    """Shuffle multiple arrays in unison, preserving the correspondence between them."""
+    assert all(
+        len(arr) == len(arrays[0]) for arr in arrays
+    ), "All arrays must have the same length."
+    p = np.random.permutation(len(arrays[0]))
+    return {
+        key: [array[i] for i in p]
+        for key, array in zip(
+            ["island_image", "positions", "background", "background_rms"], arrays
+        )
+    }
 
 
 def create_source_islands_optimized(

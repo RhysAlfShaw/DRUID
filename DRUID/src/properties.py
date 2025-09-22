@@ -6,8 +6,8 @@ Date: 08-09-2025
 from skimage import measure
 import numpy as np
 from skimage.draw import polygon
-import polars as pl
-import homology
+import polars as pl 
+from . import homology
 
 
 def calculate_radio_flux_error(background_rms, area, BMAJ, BMIN):

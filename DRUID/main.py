@@ -7,6 +7,7 @@ setproctitle.setproctitle("DRUID")
 import numpy as np
 import astropy
 import os
+import random
 
 # this prevent polars from using all available threads.
 # Especially for multithreaded homology computation. otherwise we will spawn nested threads.
@@ -68,25 +69,25 @@ def _worker(
         lifetime_limit_fraction=lifetime_limit_fraction,
     )
 
-    # source characteristics measure here!
-    if cat is not None and not cat.is_empty():
-        # Add source characteristics to the catalog
-        cat = properties.calculate_properties(
-            cat,
-            image,
-            background,
-            background_rms,
-            position,
-            analysis_threshold,
-        )
+    # # source characteristics measure here!
+    # if cat is not None and not cat.is_empty():
+    #     # Add source characteristics to the catalog
+    #     cat = properties.calculate_properties(
+    #         cat,
+    #         image,
+    #         background,
+    #         background_rms,
+    #         position,
+    #         analysis_threshold,
+    #     )
 
-    # Add position to the catalog
-    if cat is None or cat.is_empty():
-        return None
-    cat = cat.with_columns(
-        pl.lit(position[0]).alias("Island_X"),
-        pl.lit(position[1]).alias("Island_Y"),
-    )
+    # # Add position to the catalog
+    # if cat is None or cat.is_empty():
+    #     return None
+    # cat = cat.with_columns(
+    #     pl.lit(position[0]).alias("Island_X"),
+    #     pl.lit(position[1]).alias("Island_Y"),
+    # )
     return cat
 
 
@@ -170,6 +171,7 @@ class sf:
             area_limit=self.area_limit,
             verbose=self.verbose,
         )
+
         t1 = time.time()
         print(f"Thresholding took {t1 - t0:.2f} seconds.")
         t0 = time.time()
@@ -179,7 +181,10 @@ class sf:
             )
 
         images_to_process = source_islands["island_image"]
-
+        print(
+            "Max island image shape:",
+            np.max([img.shape for img in images_to_process], axis=0),
+        )
         if not images_to_process:
             if self.verbose:
                 print("No source islands to process.")
@@ -193,14 +198,14 @@ class sf:
             source_islands["background"],
             source_islands["background_rms"],
         )
-
+        print(iterable_images)
         if self.num_threads > 1:
             if self.verbose:
                 print(
                     f"Processing {len(images_to_process)} source islands in parallel. with {self.num_threads} threads."
                 )
             print("images to process:", len(images_to_process))
-            batch_size = len(images_to_process) // self.num_threads
+            batch_size = len(images_to_process) // (self.num_threads * 10)
             if batch_size < 1:  # prevent batch size of 0
                 batch_size = 1
             print(f"Batch size: {batch_size}")
