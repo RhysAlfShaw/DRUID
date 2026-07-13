@@ -78,7 +78,6 @@ def _worker(
         lifetime_limit_fraction=lifetime_limit_fraction,
     )
 
-<<<<<<< HEAD
     # # source characteristics measure here!
     # if cat is not None and not cat.is_empty():
     #     # Add source characteristics to the catalog
@@ -90,7 +89,7 @@ def _worker(
     #         position,
     #         analysis_threshold,
     #     )
-=======
+
     # source characteristics measure here!
     if cat is not None and not cat.is_empty():
         # Add source characteristics to the catalog
@@ -108,7 +107,6 @@ def _worker(
             EFFGAIN,
             EXPTIME,
         )
->>>>>>> 1e15fb5 (update?)
 
     # # Add position to the catalog
     # if cat is None or cat.is_empty():
