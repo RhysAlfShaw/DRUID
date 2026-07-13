@@ -6,13 +6,41 @@ Date: 08-09-2025
 from skimage import measure
 import numpy as np
 from skimage.draw import polygon
+
 import polars as pl 
 from . import homology
+
+import polars as pl
+from scipy.ndimage import label as scipy_label
+
+
+def get_enclosing_mask_CPU(x, y, mask):
+    """
+    Returns the connected components inside the mask starting from the point (x, y).
+    """
+    from skimage.measure import label
+
+    labeled_mask, num_features = scipy_label(mask)
+
+    # check if the specified pixel is within the mask
+    if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0]:
+        label_at_pixel = labeled_mask[y, x]
+
+        if label_at_pixel != 0:
+            # get the connected component containing the specified pixel
+            component_mask = labeled_mask == label_at_pixel
+            return component_mask
+        else:
+            # the specified pixel is not part of any connected component
+            return None
+    else:
+        # the specified pixel is outside the mask
+        return None
+>>>>>>> 1e15fb5 (update?)
 
 
 def calculate_radio_flux_error(background_rms, area, BMAJ, BMIN):
     # adapted from https://github.com/mhardcastle/radioflux/blob/master/radioflux/radioflux.py
-
     gfactor = 2 * np.sqrt(2 * np.log(2))
     Beam_area = 2 * np.pi * (BMAJ * BMIN) / gfactor
     return np.mean(background_rms) * np.sqrt(area / Beam_area)
@@ -26,8 +54,10 @@ def get_region_properties(mask, image):
 
 def get_row_mask(row, image):
     mask = np.zeros_like(image, dtype=bool)
-    mask = np.logical_or(mask, np.logical_and(img <= row["birth"], img > row["death"]))
-    mask = homology.get_enclosing_mask_CPU(int(row["y1"]), int(row["x1"]), mask)
+    mask = np.logical_or(
+        mask, np.logical_and(image <= row["birth"], image > row["death"])
+    )
+    mask = get_enclosing_mask_CPU(int(row["y1"]), int(row["x1"]), mask)
     mask = mask.astype(int)
     return mask
 
@@ -81,9 +111,9 @@ def calculate_properties(
 ):
     from matplotlib import pyplot as plt
 
-    plt.imshow(image, cmap="gray", origin="lower")
-    plt.show()
-    print(cat)
+    # plt.imshow(image, cmap="gray", origin="lower")
+    # plt.show()
+    # print(cat)
     maj = []
     min = []
     pa = []
@@ -116,6 +146,7 @@ def calculate_properties(
                 background_rms, row["area"], BMAJ, BMIN
             )
             flux_err.append(Flux_total_err)
+            snr.append(flux_tot / Flux_total_err)
 
         elif mode == "optical":
             Flux_total_err = optical_flux_err(
@@ -127,10 +158,14 @@ def calculate_properties(
                 Flux=np.nansum(mask * (image - background)),
             )
             flux_err.append(Flux_total_err)
+            snr.append(flux_tot / Flux_total_err)
 
-        snr.append(flux_tot / Flux_total_err)
+        else:
+            Flux_total_err = 0
+            flux_err.append(Flux_total_err)
+            snr.append(0)
 
-    cat = cat.with_columns(
+    cat_with_props = cat.with_columns(
         pl.Series("maj", maj),
         pl.Series("min", min),
         pl.Series("pa", pa),
@@ -142,7 +177,7 @@ def calculate_properties(
         pl.Series("snr", snr),
     )
 
-    return cat
+    return cat_with_props
 
 
 if __name__ == "__main__":
@@ -166,11 +201,8 @@ if __name__ == "__main__":
         source_islands["background"],
         source_islands["background_rms"],
     )
-    i = 0
 
     for img, pos, back, back_rms in iterable_images:
-        if i > 0:
-            break
         cat = homology.compute_homology(
             img,
             analysis_threshold=3 * back_rms,
@@ -190,6 +222,4 @@ if __name__ == "__main__":
             BMAJ=BMAJ,
             BMIN=BMIN,
         )
-        # print(cat_with_props)
-
-        i += 1
+        print(cat_with_props)

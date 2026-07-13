@@ -56,7 +56,16 @@ For more information see:
 
 
 def _worker(
-    iterable_image, analysis_threshold, lifetime_limit, lifetime_limit_fraction
+    iterable_image,
+    analysis_threshold,
+    lifetime_limit,
+    lifetime_limit_fraction,
+    mode=None,
+    BMAJ=None,
+    BMIN=None,
+    EFFRON=None,
+    EFFGAIN=None,
+    EXPTIME=None,
 ) -> "pl.DataFrame":
     """
     Worker function to compute homology for a single source island.
@@ -69,6 +78,7 @@ def _worker(
         lifetime_limit_fraction=lifetime_limit_fraction,
     )
 
+<<<<<<< HEAD
     # # source characteristics measure here!
     # if cat is not None and not cat.is_empty():
     #     # Add source characteristics to the catalog
@@ -80,6 +90,25 @@ def _worker(
     #         position,
     #         analysis_threshold,
     #     )
+=======
+    # source characteristics measure here!
+    if cat is not None and not cat.is_empty():
+        # Add source characteristics to the catalog
+        cat = properties.calculate_properties(
+            cat,
+            image,
+            background,
+            background_rms,
+            position,
+            analysis_threshold,
+            mode,
+            BMAJ,
+            BMIN,
+            EFFRON,
+            EFFGAIN,
+            EXPTIME,
+        )
+>>>>>>> 1e15fb5 (update?)
 
     # # Add position to the catalog
     # if cat is None or cat.is_empty():
@@ -127,11 +156,12 @@ class sf:
 
         if isinstance(image, str):
             try:
-                self.image = utils.get_image_from_path(image)
+                self.image, self.header = utils.get_image_from_path(image)
             except Exception as e:
                 raise ValueError(f"Could not load image from path: {image}") from e
         elif isinstance(image, np.ndarray):
             self.image = image
+            self.header = header
         else:
             raise TypeError(
                 "Image must be a file path (str) or a NumPy array (np.ndarray)."
@@ -144,6 +174,33 @@ class sf:
             self.working_directory = working_directory
         else:
             self.working_directory = None
+
+        if self.mode == "radio":
+            try:
+                self.BMAJ = self.header["BMAJ"]
+                self.BMIN = self.header["BMIN"]
+                self.EFFGAIN = None
+                self.EFFRON = None
+                self.EXPTIME = None
+
+            except KeyError as e:
+                print(
+                    "Warning: Could not find BMAJ or BMIN in header, beam parameters will be set to None."
+                )
+                self.BMAJ = None
+                self.BMIN = None
+
+        elif self.mode == "optical":
+            try:
+                self.EFFRON = self.header["EFFRON"]
+                self.EFFGAIN = self.header["EFFGAIN"]
+                self.EXPTIME = self.header["EXPTIME"]
+                self.BMAJ = None
+                self.BMIN = None
+            except KeyError as e:
+                print(
+                    "Warning: Could not find EFFRON, EFFGAIN, or EXPTIME, flux_err will be set to 0."
+                )
 
     def phsf(self, lifetime_limit: float = 0.0, lifetime_limit_fraction: float = 1):
         """
@@ -216,6 +273,12 @@ class sf:
                     analysis_threshold=self.analysis_threshold,
                     lifetime_limit=lifetime_limit,
                     lifetime_limit_fraction=lifetime_limit_fraction,
+                    mode=self.mode,
+                    BMAJ=self.BMAJ,
+                    BMIN=self.BMIN,
+                    EFFRON=self.EFFRON,
+                    EFFGAIN=self.EFFGAIN,
+                    EXPTIME=self.EXPTIME,
                 )
                 # print(iterable_images)
                 results = p.map(worker_func, iterable_images, chunksize=batch_size)
@@ -230,6 +293,12 @@ class sf:
                         self.analysis_threshold,
                         lifetime_limit,
                         lifetime_limit_fraction,
+                        self.mode,
+                        self.BMAJ,
+                        self.BMIN,
+                        self.EFFRON,
+                        self.EFFGAIN,
+                        self.EXPTIME,
                     )
                 )
 
