@@ -30,7 +30,6 @@ import os
 from scipy import ndimage
 import logging
 
-
 DRUID_MESSAGE = """   
               
               
@@ -54,9 +53,7 @@ Version: {}
 
 For more information see:
 https://github.com/RhysAlfShaw/DRUID
-        """.format(
-    version
-)
+        """.format(version)
 
 
 class sf:
@@ -767,6 +764,27 @@ class sf:
             output=self.output,
             cutupts=self.cutouts,
         )
+
+    def temp_create_polygon_workaround(self):
+        """
+        This is a temporary workaround for the polygon creation. It creates a polygon in the bounding box of the source. This is not ideal but it is much faster than the original method and allows for the use of the catalogue for other purposes.
+        """
+        polygons = []
+        for index, row in tqdm(
+            self.catalogue.iterrows(),
+            total=len(self.catalogue),
+            desc="Creating polygons",
+        ):
+            contour = utils._get_polygons_CPU(
+                x1=row.x1,
+                y1=row.y1,
+                birth=row.Birth,
+                death=row.Death,
+                image=self.image,
+            )
+            polygons.append(contour)
+
+        self.polygons = polygons
 
     def create_polygons_fast(self):
 
