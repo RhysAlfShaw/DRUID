@@ -5,17 +5,14 @@ import setproctitle
 setproctitle.setproctitle("DRUID")
 
 import numpy as np
-import astropy
+import astropy.io.fits
 import os
-import random
-
-# this prevent polars from using all available threads.
-# Especially for multithreaded homology computation. otherwise we will spawn nested threads.
-os.environ["POLARS_MAX_THREADS"] = "1"
-import polars as pl
+import sys
 import time
-
+import polars as pl
+from functools import partial
 from multiprocessing import get_context
+import multiprocessing
 from tqdm import tqdm
 
 from .src import utils
@@ -23,7 +20,9 @@ from .src import homology
 from .src import background
 from .src import source
 from .src import properties
-from functools import partial
+
+# Prevent Polars from thread oversubscription during multiprocessing
+os.environ["POLARS_MAX_THREADS"] = "1"
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -31,7 +30,6 @@ BLUE = "\033[94m"
 RESET = "\033[0m"
 BOLD = "\033[1m"
 DRUID_MESSAGE = rf"""  
-
 {RED}#############################################{RESET}
 {GREEN}
 _______   _______          _________ ______  
@@ -49,14 +47,30 @@ _______   _______          _________ ______
 {BOLD}Detector of astRonomical soUrces in optIcal and raDio images{RESET}
 
 Version: {version}
-
 For more information see:
 {BLUE}https://github.com/RhysAlfShaw/DRUID{RESET}
 """
 
+# Global variables for worker processes to avoid IPC memory overhead
+global_image = None
+global_background_map = None
+global_background_rms_map = None
+
+
+def _worker_init(img, bg, bg_rms):
+    """
+    Initializer for multiprocessing pool.
+    Loads the main arrays into the global namespace of each worker process,
+    preventing massive IPC data transfers.
+    """
+    global global_image, global_background_map, global_background_rms_map
+    global_image = img
+    global_background_map = bg
+    global_background_rms_map = bg_rms
+
 
 def _worker(
-    iterable_image,
+    island_info,
     analysis_threshold,
     lifetime_limit,
     lifetime_limit_fraction,
@@ -66,38 +80,41 @@ def _worker(
     EFFRON=None,
     EFFGAIN=None,
     EXPTIME=None,
-) -> "pl.DataFrame":
+) -> pl.DataFrame:
     """
     Worker function to compute homology for a single source island.
+    Reads from global arrays to minimize memory serialization.
     """
-    image, position, background, background_rms = iterable_image
+    bbox, position = island_info
+    min_row, min_col, max_row, max_col = bbox
+
+    # Slice the global arrays natively in the worker
+    raw_image_cutout = global_image[min_row:max_row, min_col:max_col]
+    bg_cutout = global_background_map[min_row:max_row, min_col:max_col]
+    bg_rms_cutout = global_background_rms_map[min_row:max_row, min_col:max_col]
+
+    # ---> FIX: Re-mask the cutout to remove bounding box corners <---
+    # We must zero out pixels below the threshold so the homology algorithm
+    # doesn't trace the artificial rectangular boundary of the cutout.
+    local_threshold = bg_cutout + (analysis_threshold * bg_rms_cutout)
+    island_mask = raw_image_cutout > local_threshold
+
+    # Create a new array to avoid mutating the global shared memory
+    image_cutout = np.where(island_mask, raw_image_cutout, 0)
+
     cat = homology.compute_homology(
-        image,
-        analysis_threshold=analysis_threshold * background_rms,
+        image_cutout,
+        analysis_threshold=analysis_threshold * np.mean(bg_rms_cutout),
         lifetime_limit=lifetime_limit,
         lifetime_limit_fraction=lifetime_limit_fraction,
     )
 
-    # # source characteristics measure here!
-    # if cat is not None and not cat.is_empty():
-    #     # Add source characteristics to the catalog
-    #     cat = properties.calculate_properties(
-    #         cat,
-    #         image,
-    #         background,
-    #         background_rms,
-    #         position,
-    #         analysis_threshold,
-    #     )
-
-    # source characteristics measure here!
     if cat is not None and not cat.is_empty():
-        # Add source characteristics to the catalog
         cat = properties.calculate_properties(
             cat,
-            image,
-            background,
-            background_rms,
+            image_cutout,
+            bg_cutout,
+            bg_rms_cutout,
             position,
             analysis_threshold,
             mode,
@@ -108,13 +125,14 @@ def _worker(
             EXPTIME,
         )
 
-    # # Add position to the catalog
-    # if cat is None or cat.is_empty():
-    #     return None
-    # cat = cat.with_columns(
-    #     pl.lit(position[0]).alias("Island_X"),
-    #     pl.lit(position[1]).alias("Island_Y"),
-    # )
+        # Append global offsets to the catalog for plotting
+        cat = cat.with_columns(
+            [
+                pl.lit(position[0]).alias("Island_Y"),
+                pl.lit(position[1]).alias("Island_X"),
+            ]
+        )
+
     return cat
 
 
@@ -131,11 +149,56 @@ class sf:
         working_directory: str = "DRUID/temp",
         cashe: bool = False,
     ):
+        print(multiprocessing.current_process().name)
+        error_msg = f"""
+            {RED}===================================================================={RESET}
+            {BOLD}DRUID MULTIPROCESSING ERROR{RESET}
+
+            It looks like you are running DRUID with `num_threads > 1` without 
+            protecting your execution code. 
+
+            Because DRUID uses Python's robust multiprocessing, you must wrap your 
+            top-level code in the `if __name__ == '__main__':` block.
+
+            {BLUE}Please update your script to look like this:{RESET}
+
+            from DRUID import sf
+
+            def main():
+                findmysource = sf(num_threads={num_threads}, ...)
+                findmysource.set_background(...)
+                findmysource.phsf(...)
+
+            if __name__ == "__main__":
+                main()
+            {RED}===================================================================={RESET}
         """
 
-        Initialise DRUID and preform some basic checks.
+        # CHILD PROCESS TRAP (Catches the fork bomb during spawn)
+        if multiprocessing.current_process().name != "MainProcess":
+            raise RuntimeError(error_msg)
 
-        """
+        # PRE-FLIGHT FAST FAIL (Saves time in the MainProcess)
+        if num_threads > 1 and multiprocessing.current_process().name == "MainProcess":
+            try:
+                import __main__
+
+                # Ensure we are running from a script file, not an interactive REPL/Jupyter
+                if hasattr(__main__, "__file__") and os.path.exists(__main__.__file__):
+                    with open(__main__.__file__, "r") as f:
+                        script_content = f.read()
+
+                    # Remove spaces and normalize quotes to catch all syntax variations
+                    clean_script = script_content.replace(" ", "").replace("'", '"')
+
+                    # If the guard is missing, blow up immediately!
+                    if 'if__name__=="__main__":' not in clean_script:
+                        raise RuntimeError(error_msg)
+            except Exception as e:
+                # If we can't read the file (e.g. running in Jupyter),
+                # we silently pass and let Trap #1 catch it if a failure happens later.
+                if isinstance(e, RuntimeError):
+                    raise e
 
         print(DRUID_MESSAGE)
 
@@ -165,7 +228,6 @@ class sf:
                 "Image must be a file path (str) or a NumPy array (np.ndarray)."
             )
 
-        # check if there are files in the working directory
         if self.cashe:
             if not os.path.exists(working_directory):
                 os.makedirs(working_directory)
@@ -173,49 +235,35 @@ class sf:
         else:
             self.working_directory = None
 
-        if self.mode == "radio":
+        self.BMAJ, self.BMIN = None, None
+        self.EFFRON, self.EFFGAIN, self.EXPTIME = None, None, None
+
+        if self.mode == "radio" and self.header:
             try:
-                self.BMAJ = self.header["BMAJ"]
-                self.BMIN = self.header["BMIN"]
-                self.EFFGAIN = None
-                self.EFFRON = None
-                self.EXPTIME = None
-
-            except KeyError as e:
-                print(
-                    "Warning: Could not find BMAJ or BMIN in header, beam parameters will be set to None."
-                )
-                self.BMAJ = None
-                self.BMIN = None
-
-        elif self.mode == "optical":
+                self.BMAJ = self.header.get("BMAJ")
+                self.BMIN = self.header.get("BMIN")
+            except KeyError:
+                print("Warning: Could not find BMAJ or BMIN in header.")
+        elif self.mode == "optical" and self.header:
             try:
-                self.EFFRON = self.header["EFFRON"]
-                self.EFFGAIN = self.header["EFFGAIN"]
-                self.EXPTIME = self.header["EXPTIME"]
-                self.BMAJ = None
-                self.BMIN = None
-            except KeyError as e:
-                print(
-                    "Warning: Could not find EFFRON, EFFGAIN, or EXPTIME, flux_err will be set to 0."
-                )
+                self.EFFRON = self.header.get("EFFRON")
+                self.EFFGAIN = self.header.get("EFFGAIN")
+                self.EXPTIME = self.header.get("EXPTIME")
+            except KeyError:
+                print("Warning: Could not find EFFRON, EFFGAIN, or EXPTIME.")
 
-    def phsf(self, lifetime_limit: float = 0.0, lifetime_limit_fraction: float = 1):
-        """
-        Runs the source findin algorithm on the image.
-
-        Requires that the background has first been calculated.
-
-        """
-        if self.background_map is None or self.background_rms_map is None:
+    def phsf(self, lifetime_limit: float = 0.0, lifetime_limit_fraction: float = 1.0):
+        if (
+            getattr(self, "background_map", None) is None
+            or getattr(self, "background_rms_map", None) is None
+        ):
             raise ValueError(
-                "Background map and RMS map must be set before running source finding."
-                "Please call set_background() first. or assign them manually."
+                "Background maps must be set before running source finding."
             )
 
         if self.verbose:
             print("Thresholding to find source islands...")
-        # this function is rather slow.
+
         t0 = time.time()
         source_islands = source.create_source_islands(
             self.image,
@@ -226,173 +274,120 @@ class sf:
             area_limit=self.area_limit,
             verbose=self.verbose,
         )
-
         t1 = time.time()
-        print(f"Thresholding took {t1 - t0:.2f} seconds.")
-        t0 = time.time()
-        if self.verbose:
-            print(
-                f"Found {len(source_islands['positions'])} source islands in the image with area limit {self.area_limit}."
-            )
 
-        images_to_process = source_islands["island_image"]
-        print(
-            "Max island image shape:",
-            np.max([img.shape for img in images_to_process], axis=0),
+        if self.verbose:
+            print(f"Thresholding took {t1 - t0:.2f} seconds.")
+            print(f"Found {len(source_islands['positions'])} source islands.")
+
+        # Zipping bounding boxes and positions (lightweight metadata)
+        iterable_islands = list(
+            zip(source_islands["bboxes"], source_islands["positions"])
         )
-        if not images_to_process:
+        # ---> FIX: Strategy 1 - LPT Scheduling <---
+        # Sort the islands by bounding box area (proxy for complexity) in DESCENDING order.
+        # bbox is (min_row, min_col, max_row, max_col)
+        # Area = (max_row - min_row) * (max_col - min_col)
+        iterable_islands.sort(
+            key=lambda item: (item[0][2] - item[0][0]) * (item[0][3] - item[0][1]),
+            reverse=True,
+        )
+
+        if not iterable_islands:
             if self.verbose:
                 print("No source islands to process.")
             self.catalog = pl.DataFrame()
             return
 
-        # make the iterable images_to_process and poistions
-        iterable_images = zip(
-            images_to_process,
-            source_islands["positions"],
-            source_islands["background"],
-            source_islands["background_rms"],
+        t0 = time.time()
+
+        worker_func = partial(
+            _worker,
+            analysis_threshold=self.analysis_threshold,
+            lifetime_limit=lifetime_limit,
+            lifetime_limit_fraction=lifetime_limit_fraction,
+            mode=self.mode,
+            BMAJ=self.BMAJ,
+            BMIN=self.BMIN,
+            EFFRON=self.EFFRON,
+            EFFGAIN=self.EFFGAIN,
+            EXPTIME=self.EXPTIME,
         )
-        print(iterable_images)
+
+        results = []
         if self.num_threads > 1:
             if self.verbose:
-                print(
-                    f"Processing {len(images_to_process)} source islands in parallel. with {self.num_threads} threads."
-                )
-            print("images to process:", len(images_to_process))
-            batch_size = len(images_to_process) // (self.num_threads * 10)
-            if batch_size < 1:  # prevent batch size of 0
-                batch_size = 1
-            print(f"Batch size: {batch_size}")
-            with get_context("spawn").Pool(self.num_threads) as p:
-                # Use functools.partial to pass additional arguments to _worker
-                worker_func = partial(
-                    _worker,  # analysis threshold * rms at this point.
-                    analysis_threshold=self.analysis_threshold,
-                    lifetime_limit=lifetime_limit,
-                    lifetime_limit_fraction=lifetime_limit_fraction,
-                    mode=self.mode,
-                    BMAJ=self.BMAJ,
-                    BMIN=self.BMIN,
-                    EFFRON=self.EFFRON,
-                    EFFGAIN=self.EFFGAIN,
-                    EXPTIME=self.EXPTIME,
-                )
-                # print(iterable_images)
-                results = p.map(worker_func, iterable_images, chunksize=batch_size)
+                print(f"Processing in parallel with {self.num_threads} threads.")
 
-        else:
-            print(f"Processing {len(images_to_process)} source islands sequentially.")
-            results = []
-            for img, position, background, background_rms in tqdm(iterable_images):
-                results.append(
-                    _worker(
-                        (img, position, background, background_rms),
-                        self.analysis_threshold,
-                        lifetime_limit,
-                        lifetime_limit_fraction,
-                        self.mode,
-                        self.BMAJ,
-                        self.BMIN,
-                        self.EFFRON,
-                        self.EFFGAIN,
-                        self.EXPTIME,
+            optimal_chunksize = 1
+            # Using initializer to set memory on workers safely
+            with get_context("spawn").Pool(
+                self.num_threads,
+                initializer=_worker_init,
+                initargs=(self.image, self.background_map, self.background_rms_map),
+            ) as p:
+                # imap_unordered will now instantly yield massive sources as they finish,
+                # while dynamically feeding tiny sources to whatever worker is free.
+                results = list(
+                    p.imap_unordered(
+                        worker_func, iterable_islands, chunksize=optimal_chunksize
                     )
                 )
+        else:
+            if self.verbose:
+                print("Processing sequentially.")
+            _worker_init(self.image, self.background_map, self.background_rms_map)
+            for island in tqdm(iterable_islands, disable=not self.verbose):
+                results.append(worker_func(island))
 
-            # combine the results catalogs to a single catalog
-
+        results = [res for res in results if res is not None and not res.is_empty()]
         if results:
-            # remove any None results
-            results = [res for res in results if res is not None]
             self.catalog = utils.combine_polars_catalogs(results)
+        else:
+            self.catalog = pl.DataFrame()
 
         t1 = time.time()
-        print(f"Homology computation took {t1 - t0:.2f} seconds.")
+        if self.verbose:
+            print(f"Homology computation took {t1 - t0:.2f} seconds.")
 
     def set_background(
         self,
         method: str = "rms",
         detection_threshold: int = 5,
         analysis_threshold: int = 3,
-        box_size: tuple = (50, 50),  # kernal size for background calculation
-        filter_size: tuple = (3, 3),  # size of median filter for background map
-        kernel_size: int = 3,  # size of kernel for sigma clipping.
+        box_size: tuple = (50, 50),
+        filter_size: tuple = (3, 3),
+        kernel_size: int = 3,
     ):
-        """
-        Calculate the background map of the image.
-        This is required before running the source finding algorithm.
-        """
-        # Check if background maps already exist in the working directory.
-
         if self.verbose:
             print("Calculating background map and RMS map...")
         t0 = time.time()
         self.detection_threshold = detection_threshold
         self.analysis_threshold = analysis_threshold
 
-        if self.cashe:
-            if os.path.exists(self.working_directory + "/background_map.npy"):
-                if os.path.exists(self.working_directory + "/background_rms_map.npy"):
-                    if self.verbose:
-                        print(
-                            "Background map and RMS map already exist. Loading from disk."
-                        )
-                    self.background_map = np.load(
-                        self.working_directory + "/background_map.npy"
-                    )
-                    self.background_rms_map = np.load(
-                        self.working_directory + "/background_rms_map.npy"
-                    )
-            else:
-                if self.verbose:
-                    print(
-                        "Background map and RMS map do not exist. Calculating from image."
-                    )
-                self.background_map, self.background_rms_map = (
-                    background.calculate_background_maps(
-                        self.image,
-                        bg_estimator=method,
-                        box_size=box_size,
-                        filter_size=filter_size,
-                        nsigma=detection_threshold,
-                        kernel_size=kernel_size,
-                    )
-                )
-                # Save the background maps to disk for future use.
-                np.save(
-                    self.working_directory + "/background_map.npy", self.background_map
-                )
-                np.save(
-                    self.working_directory + "/background_rms_map.npy",
-                    self.background_rms_map,
-                )
+        bg_file = os.path.join(self.working_directory or "", "background_map.npy")
+        rms_file = os.path.join(self.working_directory or "", "background_rms_map.npy")
 
-        else:
+        if self.cashe and os.path.exists(bg_file) and os.path.exists(rms_file):
             if self.verbose:
-                print("Calculating background map and RMS map from image.")
+                print("Background maps exist. Loading from disk.")
+            self.background_map = np.load(bg_file)
+            self.background_rms_map = np.load(rms_file)
+        else:
             self.background_map, self.background_rms_map = (
                 background.calculate_background_maps(
                     self.image,
                     bg_estimator=method,
                     box_size=box_size,
-                    filter_size=(3, 3),
+                    filter_size=filter_size,
                     nsigma=detection_threshold,
-                    kernel_size=3,
+                    kernel_size=kernel_size,
                 )
             )
-
             if self.cashe:
-                # Save the background maps to disk for future use.
-                np.save(
-                    self.working_directory + "/background_map.npy", self.background_map
-                )
-                np.save(
-                    self.working_directory + "/background_rms_map.npy",
-                    self.background_rms_map,
-                )
-        t1 = time.time()
-        print(f"Background calculation took {t1 - t0:.2f} seconds.")
+                np.save(bg_file, self.background_map)
+                np.save(rms_file, self.background_rms_map)
 
+        t1 = time.time()
         if self.verbose:
-            print("Background map and RMS map calculated.")
+            print(f"Background calculation took {t1 - t0:.2f} seconds.")
