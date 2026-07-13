@@ -59,24 +59,27 @@ def main():
 
         print(catalog)
         ax.imshow(findmysource.image, cmap="gray", origin="lower")
+        # Corrected Scatter Plot
         ax.scatter(
-            catalog["y1"] + catalog["Island_Y"],
-            catalog["x1"] + catalog["Island_X"],
+            catalog["y1"] + catalog["Island_X"],  # X + X
+            catalog["x1"] + catalog["Island_Y"],  # Y + Y
             s=1,
             c="red",
             label="Source Islands",
         )
+
         contours = catalog["contour"].to_list()
         Island_X = catalog["Island_X"].to_list()
         Island_Y = catalog["Island_Y"].to_list()
+
+        # Corrected Contour Plot
         for i, contour in enumerate(contours):
             contour = np.array(contour)
             Island_X_val = Island_X[i]
             Island_Y_val = Island_Y[i]
             ax.plot(
-                contour[:, 1] + Island_Y_val,
-                contour[:, 0] + Island_X_val,
-                # color="red",
+                contour[:, 1] + Island_X_val,  # X + X
+                contour[:, 0] + Island_Y_val,  # Y + Y
                 alpha=1,
                 linewidth=1,
             )
