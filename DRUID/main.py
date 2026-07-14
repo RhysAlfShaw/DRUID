@@ -93,7 +93,7 @@ def _worker(
     bg_cutout = global_background_map[min_row:max_row, min_col:max_col]
     bg_rms_cutout = global_background_rms_map[min_row:max_row, min_col:max_col]
 
-    # ---> FIX: Re-mask the cutout to remove bounding box corners <---
+    # Re-mask the cutout to remove bounding box corners
     # We must zero out pixels below the threshold so the homology algorithm
     # doesn't trace the artificial rectangular boundary of the cutout.
     local_threshold = bg_cutout + (analysis_threshold * bg_rms_cutout)
@@ -143,8 +143,10 @@ class sf:
         mode: str = None,
         verbose: bool = True,
         area_limit: int = 0,
+        max_area_limit: int = 10000,
         smooth_sigma: float = 0,
         num_threads: int = 1,
+        chunksize: int = 10,
         header: astropy.io.fits.header.Header = None,
         working_directory: str = "DRUID/temp",
         cashe: bool = False,
@@ -205,8 +207,10 @@ class sf:
         self.mode = mode
         self.verbose = verbose
         self.area_limit = area_limit
+        self.max_area_limit = max_area_limit
         self.smooth_sigma = smooth_sigma
         self.num_threads = num_threads
+        self.chunksize = chunksize
         self.header = header
         self.cashe = cashe
 
@@ -272,6 +276,7 @@ class sf:
             detection_threshold=self.detection_threshold,
             analysis_threshold=self.analysis_threshold,
             area_limit=self.area_limit,
+            max_area_limit=self.max_area_limit,
             verbose=self.verbose,
         )
         t1 = time.time()
@@ -319,25 +324,34 @@ class sf:
             if self.verbose:
                 print(f"Processing in parallel with {self.num_threads} threads.")
 
-            optimal_chunksize = 1
-            # Using initializer to set memory on workers safely
+            optimal_chunksize = self.chunksize 
+            
             with get_context("spawn").Pool(
                 self.num_threads,
                 initializer=_worker_init,
                 initargs=(self.image, self.background_map, self.background_rms_map),
             ) as p:
-                # imap_unordered will now instantly yield massive sources as they finish,
-                # while dynamically feeding tiny sources to whatever worker is free.
+                
+                # Wrap the imap_unordered generator with tqdm
+                # list() will pull from tqdm, which in turn pulls from imap_unordered
                 results = list(
-                    p.imap_unordered(
-                        worker_func, iterable_islands, chunksize=optimal_chunksize
+                    tqdm(
+                        p.imap_unordered(
+                            worker_func, 
+                            iterable_islands, 
+                            chunksize=optimal_chunksize
+                        ),
+                        total=len(iterable_islands),
+                        disable=not self.verbose,
+                        desc="Computing Homology",
+                        dynamic_ncols=True
                     )
                 )
         else:
             if self.verbose:
                 print("Processing sequentially.")
             _worker_init(self.image, self.background_map, self.background_rms_map)
-            for island in tqdm(iterable_islands, disable=not self.verbose):
+            for island in tqdm(iterable_islands, disable=not self.verbose, desc="Computing Homology", dynamic_ncols=True):
                 results.append(worker_func(island))
 
         results = [res for res in results if res is not None and not res.is_empty()]
@@ -348,7 +362,15 @@ class sf:
 
         t1 = time.time()
         if self.verbose:
-            print(f"Homology computation took {t1 - t0:.2f} seconds.")
+            print(f"Homology computation took {t1 - t0:.2f} seconds.")  
+            # print some basic stats about the catalog
+            print("---------------CATALOG SUMMARY---------------------")
+            print(f"Total sources detected: {self.catalog.height}")
+            print(f"Number of large sources (area > {self.max_area_limit}): {self.catalog.filter(pl.col('area') > self.max_area_limit).height}")
+            print("Average Background: ", self.background_map.mean())
+            print("Average Background RMS: ", self.background_rms_map.mean())
+            print("---------------------------------------------------")
+            
 
     def set_background(
         self,

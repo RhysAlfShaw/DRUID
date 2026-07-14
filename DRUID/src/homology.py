@@ -202,6 +202,7 @@ def compute_homology(
     )
 
     polar_df = polar_df.filter(pl.col("area") > area_size_threshold)
+
     if polar_df.is_empty():
         return None
 
