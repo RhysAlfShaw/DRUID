@@ -148,10 +148,10 @@ class sf:
         num_threads: int = 1,
         chunksize: int = 10,
         header: astropy.io.fits.header.Header = None,
-        working_directory: str = "DRUID/temp",
+        working_directory: str = "./druid-working-dir",
         cashe: bool = False,
+        no_message: bool = False,
     ):
-        print(multiprocessing.current_process().name)
         error_msg = f"""
             {RED}===================================================================={RESET}
             {BOLD}DRUID MULTIPROCESSING ERROR{RESET}
@@ -197,12 +197,13 @@ class sf:
                     if 'if__name__=="__main__":' not in clean_script:
                         raise RuntimeError(error_msg)
             except Exception as e:
-                # If we can't read the file (e.g. running in Jupyter),
-                # we silently pass and let Trap #1 catch it if a failure happens later.
                 if isinstance(e, RuntimeError):
                     raise e
 
-        print(DRUID_MESSAGE)
+        self.no_message = no_message
+    
+        if not self.no_message:
+            print(DRUID_MESSAGE)
 
         self.mode = mode
         self.verbose = verbose
