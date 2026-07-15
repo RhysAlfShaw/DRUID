@@ -30,17 +30,24 @@ def _get_polygons_CPU(x1, y1, birth, death, image: np.ndarray):
     mask = (image_padded <= birth) & (image_padded > death)
     enclosed_mask = get_enclosing_mask_CPU(int(y1) + 1, int(x1) + 1, mask)
 
+    # Return empty list instead of [0] to maintain consistent Polars schema
     if enclosed_mask is None:
-        return [0]
+        return []
 
-    contours = measure.find_contours(enclosed_mask, 0)
+    # 0.5 is mathematically correct to find the boundary of a boolean (0/1) mask
+    contours = measure.find_contours(enclosed_mask, 0.5)
     if not contours:
-        return [0]
+        return []
 
     contour = contours[0]
+    # Shift coordinates back due to padding
     contour[:, 0] -= 1
     contour[:, 1] -= 1
-    return contour
+    
+    # skimage returns (row, col). Convert to standard (x, y) for plotting
+    contour_xy = np.column_stack((contour[:, 1], contour[:, 0]))
+    
+    return contour_xy.tolist()
 
 
 def get_mask_CPU(x1, y1, Birth, Death, img):
@@ -226,14 +233,12 @@ def compute_homology(
     polar_df = parent_tag_func_pl(polar_df)
 
     contours = [
-        (
-            list(map(tuple, _get_polygons_CPU(x, y, b, d, img)))
-            if isinstance(_get_polygons_CPU(x, y, b, d, img), np.ndarray)
-            else [0]
-        )
+        _get_polygons_CPU(x, y, b, d, img)
         for b, d, x, y in zip(
             polar_df["birth"], polar_df["death"], polar_df["x1"], polar_df["y1"]
         )
     ]
 
-    return polar_df.with_columns(pl.Series("contour", contours))
+    return polar_df.with_columns(
+        pl.Series("contour", contours, dtype=pl.List(pl.List(pl.Float64)))
+    )

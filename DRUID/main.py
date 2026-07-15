@@ -12,6 +12,7 @@ import time
 import polars as pl
 from functools import partial
 from multiprocessing import get_context
+from multiprocessing import shared_memory
 import multiprocessing
 from tqdm import tqdm
 
@@ -56,18 +57,37 @@ global_image = None
 global_background_map = None
 global_background_rms_map = None
 
+# Keep shared memory objects alive in the worker
+shm_img = None
+shm_bg = None
+shm_rms = None
 
-def _worker_init(img, bg, bg_rms):
+def _worker_init(
+    shm_img_name, img_shape, img_dtype,
+    shm_bg_name, bg_shape, bg_dtype,
+    shm_rms_name, rms_shape, rms_dtype
+):
     """
     Initializer for multiprocessing pool.
-    Loads the main arrays into the global namespace of each worker process,
-    preventing massive IPC data transfers.
+    Attaches to shared memory blocks created by the main process.
     """
     global global_image, global_background_map, global_background_rms_map
-    global_image = img
-    global_background_map = bg
-    global_background_rms_map = bg_rms
-
+    global shm_img, shm_bg, shm_rms
+    
+    from multiprocessing import shared_memory
+    import numpy as np
+    
+    # 1. Attach and map the main image
+    shm_img = shared_memory.SharedMemory(name=shm_img_name)
+    global_image = np.ndarray(shape=img_shape, dtype=img_dtype, buffer=shm_img.buf)
+    
+    # 2. Attach and map the background map
+    shm_bg = shared_memory.SharedMemory(name=shm_bg_name)
+    global_background_map = np.ndarray(shape=bg_shape, dtype=bg_dtype, buffer=shm_bg.buf)
+    
+    # 3. Attach and map the background RMS map
+    shm_rms = shared_memory.SharedMemory(name=shm_rms_name)
+    global_background_rms_map = np.ndarray(shape=rms_shape, dtype=rms_dtype, buffer=shm_rms.buf)
 
 def _worker(
     island_info,
@@ -88,18 +108,13 @@ def _worker(
     bbox, position = island_info
     min_row, min_col, max_row, max_col = bbox
 
-    # Slice the global arrays natively in the worker
     raw_image_cutout = global_image[min_row:max_row, min_col:max_col]
     bg_cutout = global_background_map[min_row:max_row, min_col:max_col]
     bg_rms_cutout = global_background_rms_map[min_row:max_row, min_col:max_col]
 
-    # Re-mask the cutout to remove bounding box corners
-    # We must zero out pixels below the threshold so the homology algorithm
-    # doesn't trace the artificial rectangular boundary of the cutout.
     local_threshold = bg_cutout + (analysis_threshold * bg_rms_cutout)
     island_mask = raw_image_cutout > local_threshold
 
-    # Create a new array to avoid mutating the global shared memory
     image_cutout = np.where(island_mask, raw_image_cutout, 0)
 
     cat = homology.compute_homology(
@@ -125,7 +140,6 @@ def _worker(
             EXPTIME,
         )
 
-        # Append global offsets to the catalog for plotting
         cat = cat.with_columns(
             [
                 pl.lit(position[0]).alias("Island_Y"),
@@ -176,24 +190,19 @@ class sf:
             {RED}===================================================================={RESET}
         """
 
-        # CHILD PROCESS TRAP (Catches the fork bomb during spawn)
         if multiprocessing.current_process().name != "MainProcess":
             raise RuntimeError(error_msg)
 
-        # PRE-FLIGHT FAST FAIL (Saves time in the MainProcess)
         if num_threads > 1 and multiprocessing.current_process().name == "MainProcess":
             try:
                 import __main__
 
-                # Ensure we are running from a script file, not an interactive REPL/Jupyter
                 if hasattr(__main__, "__file__") and os.path.exists(__main__.__file__):
                     with open(__main__.__file__, "r") as f:
                         script_content = f.read()
 
-                    # Remove spaces and normalize quotes to catch all syntax variations
                     clean_script = script_content.replace(" ", "").replace("'", '"')
 
-                    # If the guard is missing, blow up immediately!
                     if 'if__name__=="__main__":' not in clean_script:
                         raise RuntimeError(error_msg)
             except Exception as e:
@@ -286,14 +295,10 @@ class sf:
             print(f"Thresholding took {t1 - t0:.2f} seconds.")
             print(f"Found {len(source_islands['positions'])} source islands.")
 
-        # Zipping bounding boxes and positions (lightweight metadata)
         iterable_islands = list(
             zip(source_islands["bboxes"], source_islands["positions"])
         )
-        # ---> FIX: Strategy 1 - LPT Scheduling <---
-        # Sort the islands by bounding box area (proxy for complexity) in DESCENDING order.
-        # bbox is (min_row, min_col, max_row, max_col)
-        # Area = (max_row - min_row) * (max_col - min_col)
+
         iterable_islands.sort(
             key=lambda item: (item[0][2] - item[0][0]) * (item[0][3] - item[0][1]),
             reverse=True,
@@ -327,14 +332,26 @@ class sf:
 
             optimal_chunksize = self.chunksize 
             
+            # 1. Create shared memory blocks for all three arrays
+            shm_img = shared_memory.SharedMemory(create=True, size=self.image.nbytes)
+            shm_bg = shared_memory.SharedMemory(create=True, size=self.background_map.nbytes)
+            shm_rms = shared_memory.SharedMemory(create=True, size=self.background_rms_map.nbytes)
+
+            # 2. Copy the data into the shared memory buffers
+            np.ndarray(self.image.shape, dtype=self.image.dtype, buffer=shm_img.buf)[:] = self.image[:]
+            np.ndarray(self.background_map.shape, dtype=self.background_map.dtype, buffer=shm_bg.buf)[:] = self.background_map[:]
+            np.ndarray(self.background_rms_map.shape, dtype=self.background_rms_map.dtype, buffer=shm_rms.buf)[:] = self.background_rms_map[:]
+
             with get_context("spawn").Pool(
                 self.num_threads,
                 initializer=_worker_init,
-                initargs=(self.image, self.background_map, self.background_rms_map),
+                initargs=(
+                    shm_img.name, self.image.shape, self.image.dtype,
+                    shm_bg.name, self.background_map.shape, self.background_map.dtype,
+                    shm_rms.name, self.background_rms_map.shape, self.background_rms_map.dtype
+                ) 
             ) as p:
                 
-                # Wrap the imap_unordered generator with tqdm
-                # list() will pull from tqdm, which in turn pulls from imap_unordered
                 results = list(
                     tqdm(
                         p.imap_unordered(
@@ -348,6 +365,14 @@ class sf:
                         dynamic_ncols=True
                     )
                 )
+            
+            # 3. Clean up shared memory in the main process
+            shm_img.close()
+            shm_img.unlink()
+            shm_bg.close()
+            shm_bg.unlink()
+            shm_rms.close()
+            shm_rms.unlink()
         else:
             if self.verbose:
                 print("Processing sequentially.")
@@ -364,7 +389,6 @@ class sf:
         t1 = time.time()
         if self.verbose:
             print(f"Homology computation took {t1 - t0:.2f} seconds.")  
-            # print some basic stats about the catalog
             print("---------------CATALOG SUMMARY---------------------")
             print(f"Total sources detected: {self.catalog.height}")
             print(f"Number of large sources (area > {self.max_area_limit}): {self.catalog.filter(pl.col('area') > self.max_area_limit).height}")
