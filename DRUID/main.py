@@ -376,8 +376,19 @@ class sf:
         else:
             if self.verbose:
                 print("Processing sequentially.")
-            _worker_init(self.image, self.background_map, self.background_rms_map)
-            for island in tqdm(iterable_islands, disable=not self.verbose, desc="Computing Homology", dynamic_ncols=True):
+            
+            # Safely bind module-level globals for single-threaded execution
+            global global_image, global_background_map, global_background_rms_map
+            global_image = self.image
+            global_background_map = self.background_map
+            global_background_rms_map = self.background_rms_map
+            
+            for island in tqdm(
+                iterable_islands, 
+                disable=not self.verbose, 
+                desc="Computing Homology", 
+                dynamic_ncols=True
+            ):
                 results.append(worker_func(island))
 
         results = [res for res in results if res is not None and not res.is_empty()]
