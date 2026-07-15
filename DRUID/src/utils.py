@@ -582,5 +582,8 @@ def xy_to_RaDec(x, y, header, mode):
         # stokes = 0
         # freq = 0
         # ra, dec, _, _ = wcs.all_pix2world(x, y, stokes, freq, 0)
+    elif mode == "other":
+        print("Other")
+        ra, dec = wcs.all_pix2world(x, y, 0)
 
     return ra, dec
