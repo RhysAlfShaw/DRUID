@@ -17,9 +17,9 @@ This is the newly parallelized version of DRUID, featuring improved background d
 - Pandas DataFrames have been replaced with Polars, drastically improving compute speed and memory management.
 - GPU usage has been removed, as it was incompatible with the new parallel strategy.
 
-These changes have increased DRUID's speed by roughly 10x. This improvement stems mostly from the new processing architecture and the switch to Polars, with further gains driven by parallelization. To get an idea of its new performance, check out the scaling plot below. This benchmark reflects the processing of an optical image with 0.1" resolution over a 0.57 deg² field of view, containing around 100,000 sources.
+These changes have increased DRUID's speed by roughly 5-60x. This improvement stems from the new processing architecture and the switch to Polars, with further gains driven by parallelization. To get an idea of its new performance, check out the scaling plot below. This benchmark reflects the processing of an optical image with 0.1" resolution over a 0.57 deg² field of view, containing around 100,000 sources.
 
-![DRUID Performance Scaling](docs/assets/DRUID_performance_scaling.png)
+![DRUID Performance Scaling](./docs/assets/druid_performance_scaling.png)
 
 ## Installation
 
