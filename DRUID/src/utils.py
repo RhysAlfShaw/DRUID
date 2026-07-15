@@ -15,18 +15,23 @@ def get_image_from_path(image_path):
     return image, header
 
 
-def combine_polars_catalogs(catalogs: list):
+def combine_polars_catalogs(catalogs: list) -> pl.DataFrame:
     if not catalogs:
         raise ValueError("No catalogs provided to combine.")
 
     combined_catalog = pl.concat(catalogs)
+    
+    # Check for 'id' or 'ID' depending on your upstream schema
     if "id" in combined_catalog.columns:
         combined_catalog = combined_catalog.with_columns(
-            pl.col("id").cast(pl.Int64)
-        ).with_columns(pl.col("id").rank(method="dense").alias("id"))
+            pl.int_range(1, pl.len() + 1, dtype=pl.Int64).alias("id")
+        )
+    elif "ID" in combined_catalog.columns:
+        combined_catalog = combined_catalog.with_columns(
+            pl.int_range(1, pl.len() + 1, dtype=pl.Int64).alias("ID")
+        )
 
     return combined_catalog
-
 
 def generate_2d_gaussian(A, shape, center, sigma_x, sigma_y, angle_deg=0, norm=True):
     x, y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
