@@ -5,7 +5,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='DRUID',
-    version='0.0.0',
+    version='1.0',
     author='Rhys Shaw',
     author_email='rhys.shaw@bristol.ac.uk',
     url='https://github.com/RhysAlfShaw/DRUID',
