@@ -164,6 +164,10 @@ def compute_homology(
         & (pl.col("lifetime") > lifetime_limit)
     )
 
+    polar_df = polar_df.filter(
+        pl.col("lifetime") > analysis_threshold
+    )
+
     if polar_df.is_empty():
         return None
 
