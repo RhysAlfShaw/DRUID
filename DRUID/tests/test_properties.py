@@ -18,29 +18,36 @@ def test_calculate_radio_flux_error():
 
 def test_calculate_properties():
     """
-    Test integration of skimage.measure with Polars catalogs.
+    Test properties calculated on raw image while mask bounds dictate via smoothed image.
     """
-    image = np.zeros((30, 30))
+    raw_image = np.zeros((30, 30))
+    smoothed_image = np.zeros((30, 30))
     bg = np.zeros((30, 30))
     rms = np.ones((30, 30))
     
-    image[10:20, 10:20] = 5.0
+    # Simulate a bright sharp core in raw image
+    raw_image[10:20, 10:20] = 5.0 
     
-    # Mock homology dataframe row
+    # Simulate a wider, dimmer dispersion in smoothed image
+    smoothed_image[8:22, 8:22] = 2.0 
+    
     cat = pl.DataFrame({
-        "birth": [5.1],
+        "birth": [2.1], # Mask encompasses smoothed_image's 2.0 block
         "death": [0.0],
         "x1": [15],
         "y1": [15],
-        "area": [100]
+        "area": [196] # (14 x 14 block area)
     })
     
     result = calculate_properties(
-        cat, image, bg, rms, position=(0,0), 
+        cat, raw_image=raw_image, smoothed_image=smoothed_image, 
+        background=bg, background_rms=rms, position=(0,0), 
         analysis_threshold=1.0, mode="radio", BMAJ=2.0, BMIN=2.0
     )
     
-    assert "flux" in result.columns
-    assert "maj" in result.columns
-    assert "snr" in result.columns
+    # Peak flux should pull from the 5.0 raw array, NOT the 2.0 smoothed one
+    assert result["flux_peak"][0] == 5.0
+    
+    # Total flux is the 10x10 core inside the 14x14 bounds 
+    # (100 pixels * 5.0) + (96 pixels * 0.0) = 500
     np.testing.assert_allclose(result["flux"][0], 500.0, atol=1e-3)

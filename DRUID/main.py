@@ -15,6 +15,7 @@ from multiprocessing import get_context
 from multiprocessing import shared_memory
 import multiprocessing
 from tqdm import tqdm
+from scipy.ndimage import gaussian_filter
 
 from .src import utils
 from .src import homology
@@ -54,16 +55,19 @@ For more information see:
 
 # Global variables for worker processes to avoid IPC memory overhead
 global_image = None
+global_smoothed_image = None
 global_background_map = None
 global_background_rms_map = None
 
 # Keep shared memory objects alive in the worker
 shm_img = None
+shm_smooth = None
 shm_bg = None
 shm_rms = None
 
 def _worker_init(
     shm_img_name, img_shape, img_dtype,
+    shm_smooth_name, smooth_shape, smooth_dtype,
     shm_bg_name, bg_shape, bg_dtype,
     shm_rms_name, rms_shape, rms_dtype
 ):
@@ -71,21 +75,21 @@ def _worker_init(
     Initializer for multiprocessing pool.
     Attaches to shared memory blocks created by the main process.
     """
-    global global_image, global_background_map, global_background_rms_map
-    global shm_img, shm_bg, shm_rms
+    global global_image, global_smoothed_image, global_background_map, global_background_rms_map
+    global shm_img, shm_smooth, shm_bg, shm_rms
     
     from multiprocessing import shared_memory
     import numpy as np
     
-    # 1. Attach and map the main image
     shm_img = shared_memory.SharedMemory(name=shm_img_name)
     global_image = np.ndarray(shape=img_shape, dtype=img_dtype, buffer=shm_img.buf)
     
-    # 2. Attach and map the background map
+    shm_smooth = shared_memory.SharedMemory(name=shm_smooth_name)
+    global_smoothed_image = np.ndarray(shape=smooth_shape, dtype=smooth_dtype, buffer=shm_smooth.buf)
+    
     shm_bg = shared_memory.SharedMemory(name=shm_bg_name)
     global_background_map = np.ndarray(shape=bg_shape, dtype=bg_dtype, buffer=shm_bg.buf)
     
-    # 3. Attach and map the background RMS map
     shm_rms = shared_memory.SharedMemory(name=shm_rms_name)
     global_background_rms_map = np.ndarray(shape=rms_shape, dtype=rms_dtype, buffer=shm_rms.buf)
 
@@ -103,41 +107,46 @@ def _worker(
 ) -> pl.DataFrame:
     """
     Worker function to compute homology for a single source island.
-    Reads from global arrays to minimize memory serialization.
     """
     bbox, position = island_info
     min_row, min_col, max_row, max_col = bbox
 
+    # Cutouts extraction
     raw_image_cutout = global_image[min_row:max_row, min_col:max_col]
+    smoothed_image_cutout = global_smoothed_image[min_row:max_row, min_col:max_col]
     bg_cutout = global_background_map[min_row:max_row, min_col:max_col]
     bg_rms_cutout = global_background_rms_map[min_row:max_row, min_col:max_col]
 
     local_threshold = bg_cutout + (analysis_threshold * bg_rms_cutout)
-    island_mask = raw_image_cutout > local_threshold
+    
+    # Island mask derived strictly from the smoothed cutout
+    island_mask = smoothed_image_cutout > local_threshold
+    smoothed_cutout_masked = np.where(island_mask, smoothed_image_cutout, 0)
 
-    image_cutout = np.where(island_mask, raw_image_cutout, 0)
-
+    # Topology computed on smoothed data
     cat = homology.compute_homology(
-        image_cutout,
+        smoothed_cutout_masked,
         analysis_threshold=analysis_threshold * np.mean(bg_rms_cutout),
         lifetime_limit=lifetime_limit,
         lifetime_limit_fraction=lifetime_limit_fraction,
     )
 
     if cat is not None and not cat.is_empty():
+        # Properties utilize BOTH raw and smoothed arrays
         cat = properties.calculate_properties(
             cat,
-            image_cutout,
-            bg_cutout,
-            bg_rms_cutout,
-            position,
-            analysis_threshold,
-            mode,
-            BMAJ,
-            BMIN,
-            EFFRON,
-            EFFGAIN,
-            EXPTIME,
+            raw_image=raw_image_cutout,
+            smoothed_image=smoothed_cutout_masked,
+            background=bg_cutout,
+            background_rms=bg_rms_cutout,
+            position=position,
+            analysis_threshold=analysis_threshold,
+            mode=mode,
+            BMAJ=BMAJ,
+            BMIN=BMIN,
+            EFFRON=EFFRON,
+            EFFGAIN=EFFGAIN,
+            EXPTIME=EXPTIME,
         )
 
         cat = cat.with_columns(
@@ -196,13 +205,10 @@ class sf:
         if num_threads > 1 and multiprocessing.current_process().name == "MainProcess":
             try:
                 import __main__
-
                 if hasattr(__main__, "__file__") and os.path.exists(__main__.__file__):
                     with open(__main__.__file__, "r") as f:
                         script_content = f.read()
-
                     clean_script = script_content.replace(" ", "").replace("'", '"')
-
                     if 'if__name__=="__main__":' not in clean_script:
                         raise RuntimeError(error_msg)
             except Exception as e:
@@ -210,7 +216,6 @@ class sf:
                     raise e
 
         self.no_message = no_message
-    
         if not self.no_message:
             print(DRUID_MESSAGE)
 
@@ -223,6 +228,7 @@ class sf:
         self.chunksize = chunksize
         self.header = header
         self.cashe = cashe
+        self.smoothed_image = None
 
         if image is None:
             raise ValueError(
@@ -273,14 +279,24 @@ class sf:
         ):
             raise ValueError(
                 "Background maps must be set before running source finding."
-            )
+                )
+
+        t0 = time.time()
+        
+        # Apply structural smoothing before thresholding
+        if self.smooth_sigma > 0:
+            if self.verbose:
+                print(f"Applying Gaussian smoothing with sigma={self.smooth_sigma}...")
+            self.smoothed_image = gaussian_filter(self.image, sigma=self.smooth_sigma)
+        else:
+            self.smoothed_image = self.image
 
         if self.verbose:
             print("Thresholding to find source islands...")
 
         t0 = time.time()
         source_islands = source.create_source_islands(
-            self.image,
+            self.smoothed_image,
             self.background_map,
             self.background_rms_map,
             detection_threshold=self.detection_threshold,
@@ -293,12 +309,11 @@ class sf:
 
         if self.verbose:
             print(f"Thresholding took {t1 - t0:.2f} seconds.")
-            print(f"Found {len(source_islands['positions'])} source islands.")
+            print(f"Found {len(source_islands['bboxes'])} source islands.")
 
         iterable_islands = list(
             zip(source_islands["bboxes"], source_islands["positions"])
         )
-
         iterable_islands.sort(
             key=lambda item: (item[0][2] - item[0][0]) * (item[0][3] - item[0][1]),
             reverse=True,
@@ -306,7 +321,7 @@ class sf:
 
         if not iterable_islands:
             if self.verbose:
-                print("No source islands to process.")
+                print("No source islands found. Returning empty catalog.")
             self.catalog = pl.DataFrame()
             return
 
@@ -329,16 +344,16 @@ class sf:
         if self.num_threads > 1:
             if self.verbose:
                 print(f"Processing in parallel with {self.num_threads} threads.")
-
             optimal_chunksize = self.chunksize 
             
-            # 1. Create shared memory blocks for all three arrays
+            # Shared memory allocations
             shm_img = shared_memory.SharedMemory(create=True, size=self.image.nbytes)
+            shm_smooth = shared_memory.SharedMemory(create=True, size=self.smoothed_image.nbytes)
             shm_bg = shared_memory.SharedMemory(create=True, size=self.background_map.nbytes)
             shm_rms = shared_memory.SharedMemory(create=True, size=self.background_rms_map.nbytes)
 
-            # 2. Copy the data into the shared memory buffers
             np.ndarray(self.image.shape, dtype=self.image.dtype, buffer=shm_img.buf)[:] = self.image[:]
+            np.ndarray(self.smoothed_image.shape, dtype=self.smoothed_image.dtype, buffer=shm_smooth.buf)[:] = self.smoothed_image[:]
             np.ndarray(self.background_map.shape, dtype=self.background_map.dtype, buffer=shm_bg.buf)[:] = self.background_map[:]
             np.ndarray(self.background_rms_map.shape, dtype=self.background_rms_map.dtype, buffer=shm_rms.buf)[:] = self.background_rms_map[:]
 
@@ -347,11 +362,11 @@ class sf:
                 initializer=_worker_init,
                 initargs=(
                     shm_img.name, self.image.shape, self.image.dtype,
+                    shm_smooth.name, self.smoothed_image.shape, self.smoothed_image.dtype,
                     shm_bg.name, self.background_map.shape, self.background_map.dtype,
                     shm_rms.name, self.background_rms_map.shape, self.background_rms_map.dtype
                 ) 
             ) as p:
-                
                 results = list(
                     tqdm(
                         p.imap_unordered(
@@ -361,32 +376,31 @@ class sf:
                         ),
                         total=len(iterable_islands),
                         disable=not self.verbose,
-                        desc="Computing Homology",
+                        desc="Computing",
                         dynamic_ncols=True
                     )
                 )
             
-            # 3. Clean up shared memory in the main process
+            # Flush memory
             shm_img.close()
             shm_img.unlink()
+            shm_smooth.close()
+            shm_smooth.unlink()
             shm_bg.close()
             shm_bg.unlink()
             shm_rms.close()
             shm_rms.unlink()
         else:
-            if self.verbose:
-                print("Processing sequentially.")
-            
-            # Safely bind module-level globals for single-threaded execution
-            global global_image, global_background_map, global_background_rms_map
+            global global_image, global_smoothed_image, global_background_map, global_background_rms_map
             global_image = self.image
+            global_smoothed_image = self.smoothed_image
             global_background_map = self.background_map
             global_background_rms_map = self.background_rms_map
             
             for island in tqdm(
                 iterable_islands, 
                 disable=not self.verbose, 
-                desc="Computing Homology", 
+                desc="Computing", 
                 dynamic_ncols=True
             ):
                 results.append(worker_func(island))
@@ -409,13 +423,9 @@ class sf:
             
 
     def set_background(
-        self,
-        method: str = "rms",
-        detection_threshold: int = 5,
-        analysis_threshold: int = 3,
-        box_size: tuple = (50, 50),
-        filter_size: tuple = (3, 3),
-        kernel_size: int = 3,
+        self, method: str = "rms", detection_threshold: int = 5,
+        analysis_threshold: int = 3, box_size: tuple = (50, 50),
+        filter_size: tuple = (3, 3), kernel_size: int = 3,
     ):
         if self.verbose:
             print("Calculating background map and RMS map...")

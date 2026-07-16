@@ -37,7 +37,8 @@ def optical_flux_err(EFFRON, EFFGAIN, EXPTIME, Area, sky, Flux):
 
 def calculate_properties(
     cat,
-    image,
+    raw_image,
+    smoothed_image,
     background,
     background_rms,
     position,
@@ -59,19 +60,12 @@ def calculate_properties(
     areas = cat["area"].to_numpy()
 
     maj, min_ax, pa, centroid_lst, flux, flux_peak, bg, flux_err, snr = (
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
+        [], [], [], [], [], [], [], [], []
     )
 
     for b, d, x, y, area in zip(births, deaths, x1s, y1s, areas):
-        mask = (image <= b) & (image > d)
+        # mask boundaries determined by the SMOOTHED image
+        mask = (smoothed_image <= b) & (smoothed_image > d)
         enclosed_mask = get_enclosing_mask_CPU(int(y), int(x), mask)
 
         if enclosed_mask is None:
@@ -88,7 +82,9 @@ def calculate_properties(
             continue
 
         enclosed_mask_int = enclosed_mask.astype(int)
-        props = measure.regionprops(enclosed_mask_int, intensity_image=image)
+        
+        # Geometries and intensities extracted from the RAW image
+        props = measure.regionprops(enclosed_mask_int, intensity_image=raw_image)
 
         if props:
             p = props[0]
@@ -102,9 +98,10 @@ def calculate_properties(
             pa.append(np.nan)
             centroid_lst.append((np.nan, np.nan))
 
-        flux_tot = np.nansum(enclosed_mask_int * (image - background))
+        # Flux summations computed on RAW data
+        flux_tot = np.nansum(enclosed_mask_int * (raw_image - background))
         flux.append(flux_tot)
-        flux_peak.append(np.nanmax(enclosed_mask_int * (image - background)))
+        flux_peak.append(np.nanmax(enclosed_mask_int * (raw_image - background)))
 
         bg_mean = np.mean(background * enclosed_mask_int)
         bg.append(bg_mean)
@@ -112,7 +109,6 @@ def calculate_properties(
         if mode == "radio":
             f_err = calculate_radio_flux_error(background_rms, area, BMAJ, BMIN)
             flux_err.append(f_err)
-            # Safely calculate SNR, handling NaN and zero division
             if f_err and not np.isnan(f_err):
                 snr.append(flux_tot / f_err)
             else:
