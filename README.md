@@ -4,7 +4,7 @@
 
 DRUID is a general-purpose source finder for optical and radio images written in Python, applicable to a broad range of scenarios. 
 
-DRUID relies on the use of persistent homology to find sources and nested components within an image. This information is then processed as described in Shaw et al. (in prep). 
+DRUID relies on the use of persistent homology to find sources and nested components within an image. This information is then processed as described in Shaw et al. (2025). 
 
 Currently, DRUID uses the [`cripser`](https://github.com/shizuo-kaji/CubicalRipser_3dim) library to calculate the persistence of homology groups within 2D data.
 
@@ -26,6 +26,18 @@ These changes have increased DRUID's speed by roughly 5-60x. This improvement st
 Currently, the best way to use DRUID is to clone this repository and install it along with its dependencies:
 
 ```bash
+git clone https://github.com/RhysAlfShaw/DRUID.git
+cd DRUID
+```
+
+### Conda
+
+Create conda environement:
+```bash
+conda env create -f enviroment.yml
+```
+
+```bash
 pip install .
 ```
 
@@ -34,6 +46,22 @@ You can then verify the installation by running:
 ```python
 from DRUID import sf
 ```
+### UV
+
+For a faster install with a single command using uv, simply.
+
+```bash
+uv sync --python 3.12
+```
+
+uv will automatically detect the requirements and install DRUID. Test as above or with
+
+```bash
+uv run python -c "from DRUID import sf"
+```
+
+No errors indicates a successful install.
+
 
 ### Note for Apple Silicon Users
 `cripser` does not provide compiled binaries for Apple Silicon, so you will need to compile the library locally. This can typically be done with the following command:
@@ -55,7 +83,7 @@ findmysource = sf(image=image, image_path=None, mode='optical', area_limit=5, he
 
 2. **Define the background:**
 ```python
-findmysource.set_background(detection_threshold=5, analysis_threshold=2, mode='rms')
+findmysource.set_background(detection_threshold=5, analysis_threshold=2)
 ```
 
 3. **Find and deblend sources using Persistent Homology:**
