@@ -65,11 +65,20 @@ shm_smooth = None
 shm_bg = None
 shm_rms = None
 
+
 def _worker_init(
-    shm_img_name, img_shape, img_dtype,
-    shm_smooth_name, smooth_shape, smooth_dtype,
-    shm_bg_name, bg_shape, bg_dtype,
-    shm_rms_name, rms_shape, rms_dtype
+    shm_img_name,
+    img_shape,
+    img_dtype,
+    shm_smooth_name,
+    smooth_shape,
+    smooth_dtype,
+    shm_bg_name,
+    bg_shape,
+    bg_dtype,
+    shm_rms_name,
+    rms_shape,
+    rms_dtype,
 ):
     """
     Initializer for multiprocessing pool.
@@ -77,21 +86,28 @@ def _worker_init(
     """
     global global_image, global_smoothed_image, global_background_map, global_background_rms_map
     global shm_img, shm_smooth, shm_bg, shm_rms
-    
+
     from multiprocessing import shared_memory
     import numpy as np
-    
+
     shm_img = shared_memory.SharedMemory(name=shm_img_name)
     global_image = np.ndarray(shape=img_shape, dtype=img_dtype, buffer=shm_img.buf)
-    
+
     shm_smooth = shared_memory.SharedMemory(name=shm_smooth_name)
-    global_smoothed_image = np.ndarray(shape=smooth_shape, dtype=smooth_dtype, buffer=shm_smooth.buf)
-    
+    global_smoothed_image = np.ndarray(
+        shape=smooth_shape, dtype=smooth_dtype, buffer=shm_smooth.buf
+    )
+
     shm_bg = shared_memory.SharedMemory(name=shm_bg_name)
-    global_background_map = np.ndarray(shape=bg_shape, dtype=bg_dtype, buffer=shm_bg.buf)
-    
+    global_background_map = np.ndarray(
+        shape=bg_shape, dtype=bg_dtype, buffer=shm_bg.buf
+    )
+
     shm_rms = shared_memory.SharedMemory(name=shm_rms_name)
-    global_background_rms_map = np.ndarray(shape=rms_shape, dtype=rms_dtype, buffer=shm_rms.buf)
+    global_background_rms_map = np.ndarray(
+        shape=rms_shape, dtype=rms_dtype, buffer=shm_rms.buf
+    )
+
 
 def _worker(
     island_info,
@@ -118,7 +134,7 @@ def _worker(
     bg_rms_cutout = global_background_rms_map[min_row:max_row, min_col:max_col]
 
     local_threshold = bg_cutout + (analysis_threshold * bg_rms_cutout)
-    
+
     # Island mask derived strictly from the smoothed cutout
     island_mask = smoothed_image_cutout > local_threshold
     smoothed_cutout_masked = np.where(island_mask, smoothed_image_cutout, 0)
@@ -172,7 +188,7 @@ class sf:
         chunksize: int = 10,
         header: astropy.io.fits.header.Header = None,
         working_directory: str = "./druid-working-dir",
-        cashe: bool = False,
+        cache: bool = False,
         no_message: bool = False,
     ):
         error_msg = f"""
@@ -205,6 +221,7 @@ class sf:
         if num_threads > 1 and multiprocessing.current_process().name == "MainProcess":
             try:
                 import __main__
+
                 if hasattr(__main__, "__file__") and os.path.exists(__main__.__file__):
                     with open(__main__.__file__, "r") as f:
                         script_content = f.read()
@@ -227,7 +244,7 @@ class sf:
         self.num_threads = num_threads
         self.chunksize = chunksize
         self.header = header
-        self.cashe = cashe
+        self.cache = cache
         self.smoothed_image = None
 
         if image is None:
@@ -248,7 +265,7 @@ class sf:
                 "Image must be a file path (str) or a NumPy array (np.ndarray)."
             )
 
-        if self.cashe:
+        if self.cache:
             if not os.path.exists(working_directory):
                 os.makedirs(working_directory)
             self.working_directory = working_directory
@@ -279,10 +296,10 @@ class sf:
         ):
             raise ValueError(
                 "Background maps must be set before running source finding."
-                )
+            )
 
         t0 = time.time()
-        
+
         # Apply structural smoothing before thresholding
         if self.smooth_sigma > 0:
             if self.verbose:
@@ -344,43 +361,69 @@ class sf:
         if self.num_threads > 1:
             if self.verbose:
                 print(f"Processing in parallel with {self.num_threads} threads.")
-            optimal_chunksize = self.chunksize 
-            
+            optimal_chunksize = self.chunksize
+
             # Shared memory allocations
             shm_img = shared_memory.SharedMemory(create=True, size=self.image.nbytes)
-            shm_smooth = shared_memory.SharedMemory(create=True, size=self.smoothed_image.nbytes)
-            shm_bg = shared_memory.SharedMemory(create=True, size=self.background_map.nbytes)
-            shm_rms = shared_memory.SharedMemory(create=True, size=self.background_rms_map.nbytes)
+            shm_smooth = shared_memory.SharedMemory(
+                create=True, size=self.smoothed_image.nbytes
+            )
+            shm_bg = shared_memory.SharedMemory(
+                create=True, size=self.background_map.nbytes
+            )
+            shm_rms = shared_memory.SharedMemory(
+                create=True, size=self.background_rms_map.nbytes
+            )
 
-            np.ndarray(self.image.shape, dtype=self.image.dtype, buffer=shm_img.buf)[:] = self.image[:]
-            np.ndarray(self.smoothed_image.shape, dtype=self.smoothed_image.dtype, buffer=shm_smooth.buf)[:] = self.smoothed_image[:]
-            np.ndarray(self.background_map.shape, dtype=self.background_map.dtype, buffer=shm_bg.buf)[:] = self.background_map[:]
-            np.ndarray(self.background_rms_map.shape, dtype=self.background_rms_map.dtype, buffer=shm_rms.buf)[:] = self.background_rms_map[:]
+            np.ndarray(self.image.shape, dtype=self.image.dtype, buffer=shm_img.buf)[
+                :
+            ] = self.image[:]
+            np.ndarray(
+                self.smoothed_image.shape,
+                dtype=self.smoothed_image.dtype,
+                buffer=shm_smooth.buf,
+            )[:] = self.smoothed_image[:]
+            np.ndarray(
+                self.background_map.shape,
+                dtype=self.background_map.dtype,
+                buffer=shm_bg.buf,
+            )[:] = self.background_map[:]
+            np.ndarray(
+                self.background_rms_map.shape,
+                dtype=self.background_rms_map.dtype,
+                buffer=shm_rms.buf,
+            )[:] = self.background_rms_map[:]
 
             with get_context("spawn").Pool(
                 self.num_threads,
                 initializer=_worker_init,
                 initargs=(
-                    shm_img.name, self.image.shape, self.image.dtype,
-                    shm_smooth.name, self.smoothed_image.shape, self.smoothed_image.dtype,
-                    shm_bg.name, self.background_map.shape, self.background_map.dtype,
-                    shm_rms.name, self.background_rms_map.shape, self.background_rms_map.dtype
-                ) 
+                    shm_img.name,
+                    self.image.shape,
+                    self.image.dtype,
+                    shm_smooth.name,
+                    self.smoothed_image.shape,
+                    self.smoothed_image.dtype,
+                    shm_bg.name,
+                    self.background_map.shape,
+                    self.background_map.dtype,
+                    shm_rms.name,
+                    self.background_rms_map.shape,
+                    self.background_rms_map.dtype,
+                ),
             ) as p:
                 results = list(
                     tqdm(
                         p.imap_unordered(
-                            worker_func, 
-                            iterable_islands, 
-                            chunksize=optimal_chunksize
+                            worker_func, iterable_islands, chunksize=optimal_chunksize
                         ),
                         total=len(iterable_islands),
                         disable=not self.verbose,
                         desc="Computing",
-                        dynamic_ncols=True
+                        dynamic_ncols=True,
                     )
                 )
-            
+
             # Flush memory
             shm_img.close()
             shm_img.unlink()
@@ -396,12 +439,12 @@ class sf:
             global_smoothed_image = self.smoothed_image
             global_background_map = self.background_map
             global_background_rms_map = self.background_rms_map
-            
+
             for island in tqdm(
-                iterable_islands, 
-                disable=not self.verbose, 
-                desc="Computing", 
-                dynamic_ncols=True
+                iterable_islands,
+                disable=not self.verbose,
+                desc="Computing",
+                dynamic_ncols=True,
             ):
                 results.append(worker_func(island))
 
@@ -413,19 +456,24 @@ class sf:
 
         t1 = time.time()
         if self.verbose:
-            print(f"Homology computation took {t1 - t0:.2f} seconds.")  
+            print(f"Homology computation took {t1 - t0:.2f} seconds.")
             print("---------------CATALOG SUMMARY---------------------")
             print(f"Total sources detected: {self.catalog.height}")
-            print(f"Number of large sources (area > {self.max_area_limit}): {self.catalog.filter(pl.col('area') > self.max_area_limit).height}")
+            print(
+                f"Number of large sources (area > {self.max_area_limit}): {self.catalog.filter(pl.col('area') > self.max_area_limit).height}"
+            )
             print("Average Background: ", self.background_map.mean())
             print("Average Background RMS: ", self.background_rms_map.mean())
             print("---------------------------------------------------")
-            
 
     def set_background(
-        self, method: str = "rms", detection_threshold: int = 5,
-        analysis_threshold: int = 3, box_size: tuple = (50, 50),
-        filter_size: tuple = (3, 3), kernel_size: int = 3,
+        self,
+        method: str = "rms",
+        detection_threshold: int = 5,
+        analysis_threshold: int = 3,
+        box_size: tuple = (50, 50),
+        filter_size: tuple = (3, 3),
+        kernel_size: int = 3,
     ):
         if self.verbose:
             print("Calculating background map and RMS map...")
@@ -436,7 +484,7 @@ class sf:
         bg_file = os.path.join(self.working_directory or "", "background_map.npy")
         rms_file = os.path.join(self.working_directory or "", "background_rms_map.npy")
 
-        if self.cashe and os.path.exists(bg_file) and os.path.exists(rms_file):
+        if self.cache and os.path.exists(bg_file) and os.path.exists(rms_file):
             if self.verbose:
                 print("Background maps exist. Loading from disk.")
             self.background_map = np.load(bg_file)
@@ -452,7 +500,7 @@ class sf:
                     kernel_size=kernel_size,
                 )
             )
-            if self.cashe:
+            if self.cache:
                 np.save(bg_file, self.background_map)
                 np.save(rms_file, self.background_rms_map)
 
