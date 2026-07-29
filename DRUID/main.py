@@ -189,6 +189,7 @@ class sf:
         header: astropy.io.fits.header.Header = None,
         working_directory: str = "./druid-working-dir",
         cache: bool = False,
+        output_arg: str = "",
         no_message: bool = False,
     ):
         error_msg = f"""
@@ -245,6 +246,7 @@ class sf:
         self.chunksize = chunksize
         self.header = header
         self.cache = cache
+        self.output_arg = output_arg
         self.smoothed_image = None
 
         if image is None:
@@ -451,6 +453,14 @@ class sf:
         results = [res for res in results if res is not None and not res.is_empty()]
         if results:
             self.catalog = utils.combine_polars_catalogs(results)
+            # save catalog to working directory
+            if self.cache and self.working_directory:
+                catalog_file = os.path.join(
+                    self.working_directory,
+                    f"druid_source_catalog_{self.output_arg}.fits",
+                )
+                self.catalog.write_parquet(catalog_file)
+
         else:
             self.catalog = pl.DataFrame()
 

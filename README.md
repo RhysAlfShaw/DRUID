@@ -34,7 +34,7 @@ cd DRUID
 
 Create conda environement:
 ```bash
-conda env create -f enviroment.yml
+conda env create -f environment.yml
 ```
 
 ```bash
@@ -78,36 +78,67 @@ To run DRUID, follow these steps:
 
 1. **Initialize the `sf` (source finding) object:**
 ```python
-findmysource = sf(image=image, image_path=None, mode='optical', area_limit=5, header=header)
+findmysource = sf(
+        image=image,           # image, either a 2d np.array, or path to fits file.
+        mode="optical",        
+        area_limit=5,          # Helps remove noise sources.
+        smooth_sigma=1,        # smooth image before ph analysis, fluxes measured on original image.
+        num_threads=2,         # number of threads, as num_threads increases speed gains decrease.
+        chunksize=20,          # chuncking size for multithreading, only provides minor speedup.
+        max_area_limit = 1E5,  # there are size limits on ph analysis this prevent unintentional infinate compute time.
+        working_directory=".", # where to save outputs and cache results.
+        cache=False,           # Cache/save results to working directory.
+    )
 ```
 
 2. **Define the background:**
 ```python
-findmysource.set_background(detection_threshold=5, analysis_threshold=2)
+findmysource.set_background(
+        method='mad_std',       # background statistic (sex,rms,mad_std...)
+        detection_threshold=5,  # how many sigmas above the background should we call a source.
+        analysis_threshold=3,   # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ we analyse for a source.
+        box_size=10 # boz size for creating a background map.
+    )
 ```
 
 3. **Find and deblend sources using Persistent Homology:**
 ```python
-findmysource.phsf()
+findmysource.phsf(,
+    lifetime_limit = 0,          # float value for this limit
+    lifetime_limit_fraction=1.2  # fraction based on birth and death.
+    )
 ```
 
-4. **Characterize the sources:** Now that we have a list of sources and a hierarchy of nested components, we can characterize them and measure their properties.
+This function also calculates source properties.
+
+
+## Runnig in parallel.
+
+To prevent issues with pythons multiprocessing functionality. DRUID will not run unless wrapped in a __main__. If you run this inside a jupyter notebook __main__ is not necessary.
+
 ```python
-findmysource.source_characterising(use_gpu=False)
+from DRUID import sf
+
+def main():
+    findmysource = sf(
+        image=image,           
+        mode="optical",        
+        area_limit=5,          
+        num_threads=2,          
+    )
+    findmysource.set_background()
+    findmysource.phsf()
+
+if __name__ == "__main__":
+    main()
+
 ```
-
-To explore how DRUID can be used in practice, check out the example notebooks where we demonstrate several of DRUID's functions. *(Coming soon: based on the analysis in Shaw et al., in prep).*
-
-### Saving the Catalogue
-To save the output catalogue along with the contours, you should use the `save_catalogue()` function, as this will properly serialize the object. To correctly open the catalogue again, use `open_catalogue()` after initializing the `sf` class.
 
 ## Bugs & Issues
 
 Please report any bugs or issues you encounter while using DRUID on this repository's [Issues](#) page. Thank you!
 
-## Further Application & Development
-
-If you want to extend DRUID's capabilities—whether that means adding new functionality or improving what is already implemented—feel free to submit a pull request or email me at [rhys.shaw@bristol.ac.uk](mailto:rhys.shaw@bristol.ac.uk) to discuss.
+or email me at [rhys.shaw@bristol.ac.uk](mailto:rhys.shaw@bristol.ac.uk).
 
 ## Acknowledgements
 
