@@ -43,10 +43,10 @@ def _get_polygons_CPU(x1, y1, birth, death, image: np.ndarray):
     # Shift coordinates back due to padding
     contour[:, 0] -= 1
     contour[:, 1] -= 1
-    
+
     # skimage returns (row, col). Convert to standard (x, y) for plotting
     contour_xy = np.column_stack((contour[:, 1], contour[:, 0]))
-    
+
     return contour_xy.tolist()
 
 
@@ -131,6 +131,30 @@ def parent_tag_func_pl(df: pl.DataFrame) -> pl.DataFrame:
     ).drop("parent_id")
 
 
+def assign_ph_class(df: pl.DataFrame) -> pl.DataFrame:
+    # assign a class based on parent_tag, new_row, and encloses length
+
+    is_new_row = pl.col("new_row") != 0
+    has_children = pl.col("encloses").list.len() > 1
+    has_parent = pl.col("parent_tag") != pl.col("ID")
+
+    # 2. Chain the logic
+    df = df.with_columns(
+        pl.when(is_new_row)
+        .then(1)
+        .when(~has_children & ~has_parent)
+        .then(0)
+        .when(~has_children & has_parent)
+        .then(2)
+        .when(has_children & ~has_parent)
+        .then(4)
+        .otherwise(3)
+        .alias("class")  # Replace with your desired column name
+    )
+
+    return df
+
+
 def compute_homology(
     img: np.ndarray,
     analysis_threshold: float,
@@ -164,9 +188,7 @@ def compute_homology(
         & (pl.col("lifetime") > lifetime_limit)
     )
 
-    polar_df = polar_df.filter(
-        pl.col("lifetime") > analysis_threshold
-    )
+    polar_df = polar_df.filter(pl.col("lifetime") > analysis_threshold)
 
     if polar_df.is_empty():
         return None
@@ -242,6 +264,8 @@ def compute_homology(
             polar_df["birth"], polar_df["death"], polar_df["x1"], polar_df["y1"]
         )
     ]
+
+    polar_df = assign_ph_class(polar_df)
 
     return polar_df.with_columns(
         pl.Series("contour", contours, dtype=pl.List(pl.List(pl.Float64)))
