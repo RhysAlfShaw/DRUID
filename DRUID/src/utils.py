@@ -2,6 +2,19 @@ import polars as pl
 import numpy as np
 from astropy.io import fits
 
+RED = "\033[38;5;34m"
+TITLE = "\033[38;5;75m"
+LINK = "\033[38;5;21m"
+GOLD = "\033[38;5;184m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+NOTICE = f"{BOLD}{GOLD}Info{RESET}: "
+ERROR = "\033[38;5;160m"
+WARNING = "\033[38;5;220m"
+CODEBLOCK = "\033[48;5;231m"
+BLACK = "\033[38;5;16m"
+GREEN = "\033[38;5;34m"
+
 
 def get_image_from_path(image_path):
     with fits.open(image_path) as hdul:

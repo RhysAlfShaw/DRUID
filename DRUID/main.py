@@ -8,6 +8,7 @@ import numpy as np
 import astropy.io.fits
 from astropy.table import Table
 import os
+import ast
 import sys
 import time
 import polars as pl
@@ -15,6 +16,7 @@ import polars.selectors as cs
 from functools import partial
 from multiprocessing import get_context
 from multiprocessing import shared_memory
+from rich.progress import Progress
 import multiprocessing
 from tqdm import tqdm
 from scipy.ndimage import gaussian_filter
@@ -22,6 +24,19 @@ from scipy import ndimage
 import logging
 
 from .src import utils
+from .src.utils import (
+    TITLE,
+    LINK,
+    GOLD,
+    RESET,
+    BOLD,
+    NOTICE,
+    ERROR,
+    WARNING,
+    CODEBLOCK,
+    GREEN,
+    BLACK,
+)
 from .src import homology
 from .src import background
 from .src import source
@@ -30,34 +45,25 @@ from .src import properties
 # Prevent Polars from thread oversubscription during multiprocessing
 os.environ["POLARS_MAX_THREADS"] = "1"
 
-RED = "\033[91m"
-GREEN = "\033[92m"
-BLUE = "\033[94m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
-DRUID_MESSAGE = f"""  
-{RED}#############################################{RESET}
-{GREEN}
-_______   _______          _________ ______  
-(  __  \ (  ____ )|\     /|\__   __/(  __  \ 
-| (  \  )| (    )|| )   ( |   ) (   | (  \  )
-| |   ) || (____)|| |   | |   | |   | |   ) |
-| |   | ||     __)| |   | |   | |   | |   | |
-| |   ) || (\ (   | |   | |   | |   | |   ) |
-| (__/  )| ) \ \__| (___) |___) (___| (__/  )
-(______/ |/   \__/(_______)\_______/(______/ 
+
+DRUID_MESSAGE = rf"""  
+{TITLE}
+     _____  _____  _    _ _____ _____  
+     |  __ \|  __ \| |  | |_   _|  __ \ 
+     | |  | | |__) | |  | | | | | |  | |
+     | |  | |  _  /| |  | | | | | |  | |
+     | |__| | | \ \| |__| |_| |_| |__| |
+     |_____/|_|  \_\\____/|_____|_____/
         
 {RESET}
-{RED}#############################################{RESET}
 
 {BOLD}Detector of astRonomical soUrces in optIcal and raDio images{RESET}
 
-Version: {version}
+{GOLD}Version{RESET}: {version}
 For more information see:
-{BLUE}https://github.com/RhysAlfShaw/DRUID{RESET}
+{LINK}https://github.com/RhysAlfShaw/DRUID{RESET}
 """
 
-# Global variables for worker processes to avoid IPC memory overhead
 global_image = None
 global_smoothed_image = None
 global_background_map = None
@@ -197,8 +203,8 @@ class sf:
         no_message: bool = False,
     ):
         error_msg = f"""
-            {RED}===================================================================={RESET}
-            {BOLD}DRUID MULTIPROCESSING ERROR{RESET}
+            {ERROR}===================================================================={RESET}
+            {BOLD}DRUID MULTIPROCESSING {ERROR}ERROR!{RESET}
 
             It looks like you are running DRUID with `num_threads > 1` without 
             protecting your execution code. 
@@ -206,9 +212,9 @@ class sf:
             Because DRUID uses Python's robust multiprocessing, you must wrap your 
             top-level code in the `if __name__ == '__main__':` block.
 
-            {BLUE}Please update your script to look like this:{RESET}
+            {BOLD}Please update your script to look like this:{RESET}
 
-            from DRUID import sf
+            {BLACK}from DRUID import sf
 
             def main():
                 findmysource = sf(num_threads={num_threads}, ...)
@@ -217,25 +223,43 @@ class sf:
 
             if __name__ == "__main__":
                 main()
-            {RED}===================================================================={RESET}
+            {ERROR}===================================================================={RESET}
         """
 
         if multiprocessing.current_process().name != "MainProcess":
             raise RuntimeError(error_msg)
-
         if num_threads > 1 and multiprocessing.current_process().name == "MainProcess":
             try:
                 import __main__
 
-                if hasattr(__main__, "__file__") and os.path.exists(__main__.__file__):
-                    with open(__main__.__file__, "r") as f:
-                        script_content = f.read()
-                    clean_script = script_content.replace(" ", "").replace("'", '"')
-                    if 'if__name__=="__main__":' not in clean_script:
-                        raise RuntimeError(error_msg)
+                if not hasattr(__main__, "__file__") or not os.path.exists(
+                    __main__.__file__
+                ):
+                    raise RuntimeError(
+                        f"{error_msg} (Cannot verify script safety in interactive environments)"
+                    )
+
+                with open(__main__.__file__, "r", encoding="utf-8") as f:
+                    source_code = f.read()
+
+                tree = ast.parse(source_code)
+
+                is_protected = False
+                for node in tree.body:
+                    if isinstance(node, ast.If):
+                        if isinstance(node.test, ast.Compare):
+                            left = node.test.left
+                            if isinstance(left, ast.Name) and left.id == "__name__":
+                                is_protected = True
+                                break
+
+                if not is_protected:
+                    raise RuntimeError(error_msg)
+
             except Exception as e:
-                if isinstance(e, RuntimeError):
-                    raise e
+                raise RuntimeError(
+                    f"Failed to validate safe multiprocessing execution: {e}"
+                )
 
         self.no_message = no_message
         if not self.no_message:
@@ -255,20 +279,22 @@ class sf:
 
         if image is None:
             raise ValueError(
-                "No image provided. Please provide a file path or a NumPy array."
+                f"{ERROR}No image provided. Please provide a file path or a NumPy array.{RESET}"
             )
 
         if isinstance(image, str):
             try:
                 self.image, self.header = utils.get_image_from_path(image)
             except Exception as e:
-                raise ValueError(f"Could not load image from path: {image}") from e
+                raise ValueError(
+                    f"{ERROR}Could not load image from path{RESET}: {image}"
+                ) from e
         elif isinstance(image, np.ndarray):
             self.image = image
             self.header = header
         else:
             raise TypeError(
-                "Image must be a file path (str) or a NumPy array (np.ndarray)."
+                f"{ERROR}Image must be a file path (str) or a NumPy array (np.ndarray).{RESET}"
             )
         self.working_directory = working_directory
         if self.working_directory:
@@ -283,14 +309,18 @@ class sf:
                 self.BMAJ = self.header.get("BMAJ")
                 self.BMIN = self.header.get("BMIN")
             except KeyError:
-                print("Warning: Could not find BMAJ or BMIN in header.")
+                print(
+                    f"{WARNING}Warning: Could not find BMAJ or BMIN in header.{RESET}"
+                )
         elif self.mode == "optical" and self.header:
             try:
                 self.EFFRON = self.header.get("EFFRON")
                 self.EFFGAIN = self.header.get("EFFGAIN")
                 self.EXPTIME = self.header.get("EXPTIME")
             except KeyError:
-                print("Warning: Could not find EFFRON, EFFGAIN, or EXPTIME.")
+                print(
+                    f"{WARNING}Warning: Could not find EFFRON, EFFGAIN, or EXPTIME.{RESET}"
+                )
 
     def phsf(self, lifetime_limit: float = 0.0, lifetime_limit_fraction: float = 1.0):
         if (
@@ -298,7 +328,7 @@ class sf:
             or getattr(self, "background_rms_map", None) is None
         ):
             raise ValueError(
-                "Background maps must be set before running source finding."
+                f"{ERROR}Background maps must be set before running source finding.{RESET}"
             )
 
         t0 = time.time()
@@ -306,13 +336,15 @@ class sf:
         # Apply structural smoothing before thresholding
         if self.smooth_sigma > 0:
             if self.verbose:
-                print(f"Applying Gaussian smoothing with sigma={self.smooth_sigma}...")
+                print(
+                    f"{NOTICE}Applying Gaussian smoothing with sigma={self.smooth_sigma}...{RESET}"
+                )
             self.smoothed_image = gaussian_filter(self.image, sigma=self.smooth_sigma)
         else:
             self.smoothed_image = self.image
 
         if self.verbose:
-            print("Thresholding to find source islands...")
+            print(f"{NOTICE}Thresholding to find source islands...{RESET}")
 
         t0 = time.time()
         source_islands = source.create_source_islands(
@@ -328,8 +360,10 @@ class sf:
         t1 = time.time()
 
         if self.verbose:
-            print(f"Thresholding took {t1 - t0:.2f} seconds.")
-            print(f"Found {len(source_islands['bboxes'])} source islands.")
+            print(f"{NOTICE}Thresholding took {t1 - t0:.2f} seconds.{RESET}")
+            print(
+                f"{NOTICE}Found {len(source_islands['bboxes'])} source islands.{RESET}"
+            )
 
         iterable_islands = list(
             zip(source_islands["bboxes"], source_islands["positions"])
@@ -341,7 +375,9 @@ class sf:
 
         if not iterable_islands:
             if self.verbose:
-                print("No source islands found. Returning empty catalog.")
+                print(
+                    "{WARNING}Warning: No source islands found. Returning empty catalog.{RESET}"
+                )
             self.catalog = pl.DataFrame()
             return
 
@@ -363,7 +399,9 @@ class sf:
         results = []
         if self.num_threads > 1:
             if self.verbose:
-                print(f"Processing in parallel with {self.num_threads} threads.")
+                print(
+                    f"{NOTICE}Processing in parallel with {self.num_threads} threads.{RESET}"
+                )
             optimal_chunksize = self.chunksize
 
             # Shared memory allocations
@@ -415,17 +453,17 @@ class sf:
                     self.background_rms_map.dtype,
                 ),
             ) as p:
-                results = list(
-                    tqdm(
-                        p.imap_unordered(
-                            worker_func, iterable_islands, chunksize=optimal_chunksize
-                        ),
-                        total=len(iterable_islands),
-                        disable=not self.verbose,
-                        desc="Computing",
-                        dynamic_ncols=True,
+                with Progress(disable=not self.verbose) as progress:
+                    task = progress.add_task(
+                        "[magenta]:mage: Computing...", total=len(iterable_islands)
                     )
-                )
+
+                    results = []
+                    for result in p.imap_unordered(
+                        worker_func, iterable_islands, chunksize=optimal_chunksize
+                    ):
+                        results.append(result)
+                        progress.advance(task)  # Update the progress bar incrementally
 
             # Flush memory
             shm_img.close()
@@ -443,13 +481,15 @@ class sf:
             global_background_map = self.background_map
             global_background_rms_map = self.background_rms_map
 
-            for island in tqdm(
-                iterable_islands,
-                disable=not self.verbose,
-                desc="Computing",
-                dynamic_ncols=True,
-            ):
-                results.append(worker_func(island))
+            # Single-threaded Rich progress bar implementation
+            with Progress(disable=not self.verbose) as progress:
+                task = progress.add_task(
+                    f"[magenta]:mage: Computing...", total=len(iterable_islands)
+                )
+
+                for island in iterable_islands:
+                    results.append(worker_func(island))
+                    progress.advance(task)
 
         results = [res for res in results if res is not None and not res.is_empty()]
         if results:
@@ -486,7 +526,7 @@ class sf:
 
             else:
                 print(
-                    "Warning: No FITS header provided. RA and Dec columns will not be calculated."
+                    f"{WARNING}Warning{RESET}: No FITS header provided. RA and Dec columns will not be calculated."
                 )
                 self.catalog = self.catalog.with_columns(
                     pl.lit(None).alias("ra"), pl.lit(None).alias("dec")
@@ -535,24 +575,23 @@ class sf:
                 self.working_directory,
                 f"druid_source_catalog_{self.output_arg}",
             )
-            print(catalog_file)
             self.catalog.write_parquet(f"{catalog_file}.parquet")
 
-            print(f"Catalog saved to {catalog_file}.parquet")
+            print(f"{NOTICE}Catalog saved to {catalog_file}.parquet{RESET}")
         else:
             self.catalog = pl.DataFrame()
 
         t1 = time.time()
         if self.verbose:
-            print(f"Homology computation took {t1 - t0:.2f} seconds.")
-            print("---------------CATALOG SUMMARY---------------------")
+            print(f"{NOTICE}Homology computation took {t1 - t0:.2f} seconds.{RESET}")
+            print(f"{GREEN}---------------CATALOG SUMMARY---------------------{RESET}")
             print(f"Total sources detected: {self.catalog.height}")
             print(
                 f"Number of large sources (area > {self.max_area_limit}): {self.catalog.filter(pl.col('area') > self.max_area_limit).height}"
             )
             print("Average Background: ", self.background_map.mean())
             print("Average Background RMS: ", self.background_rms_map.mean())
-            print("---------------------------------------------------")
+            print(f"{GREEN}---------------------------------------------------{RESET}")
 
     def set_background(
         self,
@@ -564,7 +603,7 @@ class sf:
         kernel_size: int = 3,
     ):
         if self.verbose:
-            print("Calculating background map and RMS map...")
+            print(f"{NOTICE}Calculating background map and RMS map...{RESET}")
         t0 = time.time()
         self.detection_threshold = detection_threshold
         self.analysis_threshold = analysis_threshold
@@ -574,7 +613,7 @@ class sf:
 
         if self.cache and os.path.exists(bg_file) and os.path.exists(rms_file):
             if self.verbose:
-                print("Background maps exist. Loading from disk.")
+                print(f"{NOTICE}Background maps exist. Loading from disk.{RESET}")
             self.background_map = np.load(bg_file)
             self.background_rms_map = np.load(rms_file)
         else:
@@ -594,4 +633,4 @@ class sf:
 
         t1 = time.time()
         if self.verbose:
-            print(f"Background calculation took {t1 - t0:.2f} seconds.")
+            print(f"{NOTICE}Background calculation took {t1 - t0:.2f} seconds.{RESET}")

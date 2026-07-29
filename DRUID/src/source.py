@@ -2,6 +2,20 @@ import numpy as np
 from skimage.measure import regionprops_table, label
 import polars as pl
 
+from ..src.utils import (
+    TITLE,
+    LINK,
+    GOLD,
+    RESET,
+    BOLD,
+    NOTICE,
+    ERROR,
+    WARNING,
+    CODEBLOCK,
+    BLACK,
+)
+
+
 def create_source_islands(
     image,
     background_map,
@@ -18,14 +32,16 @@ def create_source_islands(
     Separates massive islands for cataloging without computing homology.
     """
     if verbose:
-        print("Step 1: Applying analysis threshold and labeling connected components...")
+        print(
+            f"{NOTICE}Applying analysis threshold and labeling connected components...{RESET}"
+        )
 
     # Vectorized boolean mask creation
     analysis_mask = image > (background_map + analysis_threshold * background_rms_map)
     labeled_image = label(analysis_mask, connectivity=2)
 
     if verbose:
-        print("Step 2: Measuring region properties...")
+        print(f"{NOTICE}Measuring region properties...{RESET}")
 
     # Use regionprops_table for C-level fast property extraction
     properties_table = regionprops_table(
@@ -37,23 +53,28 @@ def create_source_islands(
     props_df = pl.DataFrame(properties_table)
 
     if verbose:
-        print(f"Initial regions found: {props_df.height}")
-        print(f"Step 3: Filtering regions by area ({area_limit} <= area <= {max_area_limit} pixels)...")
+        print(f"{NOTICE}Initial regions found: {props_df.height}{RESET}")
+        print(
+            f"{NOTICE}Filtering regions by area ({area_limit} <= area <= {max_area_limit} pixels)...{RESET}"
+        )
 
     # ---> FAST POLARS FILTERING <---
     # Standard processing queue
     filtered_props_df = props_df.filter(
-        (pl.col("area") >= area_limit) & 
-        (pl.col("area") <= max_area_limit)
+        (pl.col("area") >= area_limit) & (pl.col("area") <= max_area_limit)
     )
-    
+
     # Flagged massive islands
     massive_props_df = props_df.filter(pl.col("area") > max_area_limit)
 
     if verbose:
         if massive_props_df.height > 0:
-            print(f"Flagged {massive_props_df.height} massive region(s) to retain for the final catalog.")
-        print(f"Regions queued for homology processing: {filtered_props_df.height}")
+            print(
+                f"{WARNING}WARNING{RESET}: Flagged {massive_props_df.height} massive region(s) to retain for the final catalog.{RESET}"
+            )
+        print(
+            f"{NOTICE}Regions queued for homology processing: {filtered_props_df.height}{RESET}"
+        )
 
     # Extract standard metadata (for the multiprocessing pool)
     bboxes = list(
@@ -92,11 +113,11 @@ def create_source_islands(
     source_islands = {
         "bboxes": bboxes,
         "positions": positions,
-        "massive_bboxes": massive_bboxes,       # <-- New: Saved massive bounding boxes
-        "massive_positions": massive_positions, # <-- New: Saved massive coordinates
+        "massive_bboxes": massive_bboxes,  # <-- New: Saved massive bounding boxes
+        "massive_positions": massive_positions,  # <-- New: Saved massive coordinates
     }
 
     if verbose:
-        print("Source island creation complete.")
+        print(f"{NOTICE}Source island creation complete.{RESET}")
 
     return source_islands
