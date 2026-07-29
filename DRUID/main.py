@@ -6,6 +6,7 @@ setproctitle.setproctitle("DRUID")
 
 import numpy as np
 import astropy.io.fits
+from astropy.table import Table
 import os
 import sys
 import time
@@ -267,13 +268,10 @@ class sf:
             raise TypeError(
                 "Image must be a file path (str) or a NumPy array (np.ndarray)."
             )
-
-        if self.cache:
+        self.working_directory = working_directory
+        if self.working_directory:
             if not os.path.exists(working_directory):
                 os.makedirs(working_directory)
-            self.working_directory = working_directory
-        else:
-            self.working_directory = None
 
         self.BMAJ, self.BMIN = None, None
         self.EFFRON, self.EFFGAIN, self.EXPTIME = None, None, None
@@ -517,6 +515,7 @@ class sf:
                 "encloses",
                 "new_row",
                 "parent_tag",
+                "class",
                 "lifetimeFrac",
                 "bbox_min_y",
                 "bbox_min_x",
@@ -530,13 +529,14 @@ class sf:
             )
 
             # save catalog to working directory
-            if self.cache and self.working_directory:
-                catalog_file = os.path.join(
-                    self.working_directory,
-                    f"druid_source_catalog_{self.output_arg}.fits",
-                )
-                self.catalog.write_parquet(catalog_file)
+            catalog_file = os.path.join(
+                self.working_directory,
+                f"druid_source_catalog_{self.output_arg}",
+            )
+            print(catalog_file)
+            self.catalog.write_parquet(f"{catalog_file}.parquet")
 
+            print(f"Catalog saved to {catalog_file}.parquet")
         else:
             self.catalog = pl.DataFrame()
 
