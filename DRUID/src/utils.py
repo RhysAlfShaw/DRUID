@@ -20,7 +20,7 @@ def combine_polars_catalogs(catalogs: list) -> pl.DataFrame:
         raise ValueError("No catalogs provided to combine.")
 
     combined_catalog = pl.concat(catalogs)
-    
+
     # Check for 'id' or 'ID' depending on your upstream schema
     if "id" in combined_catalog.columns:
         combined_catalog = combined_catalog.with_columns(
@@ -32,6 +32,7 @@ def combine_polars_catalogs(catalogs: list) -> pl.DataFrame:
         )
 
     return combined_catalog
+
 
 def generate_2d_gaussian(A, shape, center, sigma_x, sigma_y, angle_deg=0, norm=True):
     x, y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
@@ -50,3 +51,16 @@ def generate_2d_gaussian(A, shape, center, sigma_x, sigma_y, angle_deg=0, norm=T
 
 def model_beam_func(peak_flux, shape, x, y, bmaj, bmin, bpa):
     return generate_2d_gaussian(peak_flux, shape, (x, y), bmaj, bmin, bpa, norm=False)
+
+
+def calculate_radec(catalog: pl.DataFrame, header) -> pl.DataFrame:
+    # Convert pixel coordinates to RA/Dec using WCS.
+    from astropy.wcs import WCS
+
+    wcs = WCS(header)
+    ra_dec = wcs.all_pix2world(
+        catalog["centroid_x"].to_numpy(), catalog["centroid_y"].to_numpy(), 0
+    )
+    ra, dec = ra_dec
+    catalog = catalog.with_columns(pl.Series("ra", ra), pl.Series("dec", dec))
+    return catalog
