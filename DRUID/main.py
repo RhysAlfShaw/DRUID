@@ -21,11 +21,6 @@ from scipy.ndimage import gaussian_filter
 from scipy import ndimage
 import logging
 
-DRUID_MESSAGE = """   
-              
-              
-#############################################
-
 from .src import utils
 from .src import homology
 from .src import background
@@ -40,7 +35,7 @@ GREEN = "\033[92m"
 BLUE = "\033[94m"
 RESET = "\033[0m"
 BOLD = "\033[1m"
-DRUID_MESSAGE = rf"""  
+DRUID_MESSAGE = f"""  
 {RED}#############################################{RESET}
 {GREEN}
 _______   _______          _________ ______  
