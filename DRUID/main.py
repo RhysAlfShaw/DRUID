@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import polars as pl
+import polars.selectors as cs
 from functools import partial
 from multiprocessing import get_context
 from multiprocessing import shared_memory
@@ -453,6 +454,81 @@ class sf:
         results = [res for res in results if res is not None and not res.is_empty()]
         if results:
             self.catalog = utils.combine_polars_catalogs(results)
+            # calculate the ra and dec columns if the header is available
+            # add island offsets to the centroid and contour coordinates
+            self.catalog = self.catalog.with_columns(
+                [
+                    (pl.col("centroid_x") + pl.col("Island_X")).alias("centroid_x"),
+                    (pl.col("centroid_y") + pl.col("Island_Y")).alias("centroid_y"),
+                ]
+            )
+            # add island offsets to the contour coordinates
+            self.catalog = (
+                self.catalog.with_row_index("__row_id")
+                .explode("contour")
+                .with_columns(
+                    pl.concat_list(
+                        [
+                            pl.col("contour").list.get(0) + pl.col("Island_X"),
+                            pl.col("contour").list.get(1) + pl.col("Island_Y"),
+                        ]
+                    ).alias("contour")
+                )
+                .group_by("__row_id", maintain_order=True)
+                .agg(
+                    pl.all().exclude("contour").first(),
+                    pl.col("contour"),
+                )
+                .drop("__row_id")
+            )
+            if self.header is not None:
+                self.catalog = utils.calculate_radec(self.catalog, self.header)
+
+            else:
+                print(
+                    "Warning: No FITS header provided. RA and Dec columns will not be calculated."
+                )
+                self.catalog = self.catalog.with_columns(
+                    pl.lit(None).alias("ra"), pl.lit(None).alias("dec")
+                )
+            desired_order = [
+                "ID",
+                "ra",
+                "dec",
+                "centroid_x",
+                "centroid_y",
+                "flux",
+                "flux_peak",
+                "flux_err",
+                "bg",
+                "snr",
+                "maj",
+                "min",
+                "pa",
+                "area",
+                "contour",
+                "lifetime",
+                "birth",
+                "death",
+                "x1",
+                "y1",
+                "x2",
+                "y2",
+                "encloses",
+                "new_row",
+                "parent_tag",
+                "lifetimeFrac",
+                "bbox_min_y",
+                "bbox_min_x",
+                "bbox_max_y",
+                "bbox_max_x",
+                "Island_X",
+                "Island_Y",
+            ]
+            self.catalog = self.catalog.select(
+                *desired_order, cs.all().exclude(desired_order)
+            )
+
             # save catalog to working directory
             if self.cache and self.working_directory:
                 catalog_file = os.path.join(
