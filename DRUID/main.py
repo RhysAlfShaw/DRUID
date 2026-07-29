@@ -9,7 +9,6 @@ import astropy.io.fits
 from astropy.table import Table
 import os
 import ast
-import sys
 import time
 import polars as pl
 import polars.selectors as cs
@@ -18,10 +17,7 @@ from multiprocessing import get_context
 from multiprocessing import shared_memory
 from rich.progress import Progress
 import multiprocessing
-from tqdm import tqdm
 from scipy.ndimage import gaussian_filter
-from scipy import ndimage
-import logging
 
 from .src import utils
 from .src.utils import (
