@@ -29,7 +29,8 @@ dependencies = [
     "bottleneck",
     "matplotlib",
     "tqdm",
-    "setproctitle"
+    "setproctitle",
+    "rich>=15.0.0",
 ]
 
 [project.urls]
