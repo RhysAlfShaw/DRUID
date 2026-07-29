@@ -18,6 +18,13 @@ from multiprocessing import shared_memory
 import multiprocessing
 from tqdm import tqdm
 from scipy.ndimage import gaussian_filter
+from scipy import ndimage
+import logging
+
+DRUID_MESSAGE = """   
+              
+              
+#############################################
 
 from .src import utils
 from .src import homology
