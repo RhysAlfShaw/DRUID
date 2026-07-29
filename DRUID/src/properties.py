@@ -60,7 +60,15 @@ def calculate_properties(
     areas = cat["area"].to_numpy()
 
     maj, min_ax, pa, centroid_lst, flux, flux_peak, bg, flux_err, snr = (
-        [], [], [], [], [], [], [], [], []
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
     )
 
     for b, d, x, y, area in zip(births, deaths, x1s, y1s, areas):
@@ -82,14 +90,14 @@ def calculate_properties(
             continue
 
         enclosed_mask_int = enclosed_mask.astype(int)
-        
+
         # Geometries and intensities extracted from the RAW image
         props = measure.regionprops(enclosed_mask_int, intensity_image=raw_image)
 
         if props:
             p = props[0]
-            maj.append(p.major_axis_length)
-            min_ax.append(p.minor_axis_length)
+            maj.append(p.axis_major_length)
+            min_ax.append(p.axis_minor_length)
             pa.append(p.orientation)
             centroid_lst.append(p.centroid)
         else:

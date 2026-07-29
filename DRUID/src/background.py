@@ -21,7 +21,7 @@ from photutils.segmentation import detect_sources
 def make_source_mask(data, nsigma=3.0, kernel_size=3):
     mean, median, std = sigma_clipped_stats(data, sigma=nsigma)
     threshold = median + nsigma * std
-    segm = detect_sources(data, threshold, npixels=kernel_size**2)
+    segm = detect_sources(data, threshold, n_pixels=kernel_size**2)
     if segm is None:
         return np.zeros(data.shape, dtype=bool)
     return segm.data > 0
