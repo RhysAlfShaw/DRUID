@@ -27,12 +27,14 @@ def calculate_radio_flux_error(background_rms, area, BMAJ, BMIN):
     return np.mean(background_rms) * np.sqrt(area / Beam_area)
 
 
-def optical_flux_err(EFFRON, EFFGAIN, EXPTIME, Area, sky, Flux):
-    try:
-        RON_noise = np.sqrt(Area) * (EFFRON / EFFGAIN) * EXPTIME
-    except Exception:
-        RON_noise = 0
-    return np.sqrt(RON_noise**2 + np.sqrt(sky) + np.sqrt(Flux))
+def optical_flux_err(data, bkg, eff_gain):
+    # https://photutils.readthedocs.io/en/stable/api/photutils.utils.calc_total_error.html
+    # photoutils implentation of optical flux error calculations.
+    # f_err = sqrt(obk^2 + (I/g_eff)^2 + (obk/rms_median)^2)
+
+    from photutils.utils import calc_total_error
+
+    return calc_total_error(data, bkg, eff_gain)
 
 
 def calculate_properties(
@@ -77,7 +79,6 @@ def calculate_properties(
         enclosed_mask = get_enclosing_mask_CPU(int(y), int(x), mask)
 
         if enclosed_mask is None:
-            # Fallback for empty/invalid properties
             maj.append(np.nan)
             min_ax.append(np.nan)
             pa.append(np.nan)
@@ -91,7 +92,7 @@ def calculate_properties(
 
         enclosed_mask_int = enclosed_mask.astype(int)
 
-        # Geometries and intensities extracted from the RAW image
+        # properties extracted from the RAW image
         props = measure.regionprops(enclosed_mask_int, intensity_image=raw_image)
 
         if props:
@@ -123,14 +124,9 @@ def calculate_properties(
                 snr.append(np.nan)
 
         elif mode == "optical":
-            f_err = optical_flux_err(
-                EFFRON,
-                EFFGAIN,
-                EXPTIME,
-                area,
-                np.nansum(background * enclosed_mask_int),
-                flux_tot,
-            )
+            if EFFGAIN is None:
+                EFFGAIN = 0  # Default to 1 if not provided
+            f_err = optical_flux_err(raw_image, background, EFFGAIN).mean()
             flux_err.append(f_err)
             snr.append(flux_tot / f_err if f_err else 0)
         else:
