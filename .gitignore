@@ -16,9 +16,12 @@ ignore/
 
 
 
-
-
+dev_plan.md
+*.drawio
 DRUID.egg-info
 build
 backup
 notepad.ipynb
+temp
+_*
+*.lock
