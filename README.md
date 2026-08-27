@@ -103,7 +103,7 @@ findmysource.set_background(
 
 3. **Find and deblend sources using Persistent Homology:**
 ```python
-findmysource.phsf(,
+findmysource.phsf(
     lifetime_limit = 0,          # float value for this limit
     lifetime_limit_fraction=1.2  # fraction based on birth and death.
     )
