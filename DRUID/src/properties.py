@@ -52,7 +52,6 @@ def calculate_properties(
     EFFGAIN=None,
     EXPTIME=None,
 ):
-    # Vectorized extraction to avoid Polars iter_rows
     births = cat["birth"].to_numpy()
     deaths = (
         cat["deaths"].to_numpy() if "deaths" in cat.columns else cat["death"].to_numpy()
@@ -107,7 +106,7 @@ def calculate_properties(
             pa.append(np.nan)
             centroid_lst.append((np.nan, np.nan))
 
-        # Flux summations computed on RAW data
+        # fluxes computed on RAW data
         flux_tot = np.nansum(enclosed_mask_int * (raw_image - background))
         flux.append(flux_tot)
         flux_peak.append(np.nanmax(enclosed_mask_int * (raw_image - background)))
@@ -125,7 +124,7 @@ def calculate_properties(
 
         elif mode == "optical":
             if EFFGAIN is None:
-                EFFGAIN = 0  # Default to 1 if not provided
+                EFFGAIN = 0  # default to 0 if not provided (no gain correction.)
             f_err = optical_flux_err(raw_image, background, EFFGAIN).mean()
             flux_err.append(f_err)
             snr.append(flux_tot / f_err if f_err else 0)

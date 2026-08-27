@@ -29,7 +29,7 @@ def make_source_mask(data, nsigma=3.0, kernel_size=3):
 
 def calculate_background_maps(
     image,
-    bg_estimator="median",
+    bg_estimator="sex",
     box_size=(50, 50),
     filter_size=(3, 3),
     nsigma=3.0,
