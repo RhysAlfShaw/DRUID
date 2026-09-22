@@ -70,7 +70,8 @@ def calculate_radec(catalog: pl.DataFrame, header) -> pl.DataFrame:
     # Convert pixel coordinates to RA/Dec using WCS.
     from astropy.wcs import WCS
 
-    wcs = WCS(header)
+    wcs = WCS(header).celestial
+    print(wcs)
     ra_dec = wcs.all_pix2world(
         catalog["centroid_x"].to_numpy(), catalog["centroid_y"].to_numpy(), 0
     )

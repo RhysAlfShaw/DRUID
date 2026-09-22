@@ -1,10 +1,11 @@
 # DRUID
+
 [![Run tests](https://github.com/RhysAlfShaw/DRUID/actions/workflows/pytest.yaml/badge.svg)](https://github.com/RhysAlfShaw/DRUID/actions/workflows/pytest.yaml)
 [![codecov](https://codecov.io/gh/RhysAlfShaw/DRUID/graph/badge.svg?token=C4KD4C6IXA)](https://codecov.io/gh/RhysAlfShaw/DRUID)
 
-DRUID is a general-purpose source finder for optical and radio images written in Python, applicable to a broad range of scenarios. 
+DRUID is a general-purpose source finder for optical and radio images written in Python, applicable to a broad range of scenarios.
 
-DRUID relies on the use of persistent homology to find sources and nested components within an image. This information is then processed as described in Shaw et al. (2025). 
+DRUID relies on the use of persistent homology to find sources and nested components within an image. This information is then processed as described in Shaw et al. (2025).
 
 Currently, DRUID uses the [`cripser`](https://github.com/shizuo-kaji/CubicalRipser_3dim) library to calculate the persistence of homology groups within 2D data.
 
@@ -13,6 +14,7 @@ Currently, DRUID uses the [`cripser`](https://github.com/shizuo-kaji/CubicalRips
 This is the newly parallelized version of DRUID, featuring improved background data handling. The version of DRUID used in Shaw et al. (2025) can be found in the [releases]().
 
 ### Notes on the new version
+
 - DRUID's architecture has been significantly updated to allow for highly efficient parallelization.
 - Pandas DataFrames have been replaced with Polars, drastically improving compute speed and memory management.
 - GPU usage has been removed, as it was incompatible with the new parallel strategy.
@@ -33,6 +35,7 @@ cd DRUID
 ### Conda
 
 Create conda environement:
+
 ```bash
 conda env create -f environment.yml
 ```
@@ -46,6 +49,7 @@ You can then verify the installation by running:
 ```python
 from DRUID import sf
 ```
+
 ### UV
 
 For a faster install with a single command using uv, simply.
@@ -62,8 +66,8 @@ uv run python -c "from DRUID import sf"
 
 No errors indicates a successful install.
 
-
 ### Note for Apple Silicon Users
+
 `cripser` does not provide compiled binaries for Apple Silicon, so you will need to compile the library locally. This can typically be done with the following command:
 
 ```bash
@@ -77,10 +81,11 @@ Any installation errors at this stage will likely stem from the version of CMake
 To run DRUID, follow these steps:
 
 1. **Initialize the `sf` (source finding) object:**
+
 ```python
 findmysource = sf(
         image=image,           # image, either a 2d np.array, or path to fits file.
-        mode="optical",        
+        mode="optical",      
         area_limit=5,          # Helps remove noise sources.
         smooth_sigma=1,        # smooth image before ph analysis, fluxes measured on original image.
         num_threads=2,         # number of threads, as num_threads increases speed gains decrease.
@@ -92,6 +97,7 @@ findmysource = sf(
 ```
 
 2. **Define the background:**
+
 ```python
 findmysource.set_background(
         method='mad_std',       # background statistic (sex,rms,mad_std...)
@@ -102,6 +108,7 @@ findmysource.set_background(
 ```
 
 3. **Find and deblend sources using Persistent Homology:**
+
 ```python
 findmysource.phsf(
     lifetime_limit = 0,          # float value for this limit
@@ -110,7 +117,6 @@ findmysource.phsf(
 ```
 
 This function also calculates source properties.
-
 
 ## Runnig in parallel.
 
@@ -121,17 +127,16 @@ from DRUID import sf
 
 def main():
     findmysource = sf(
-        image=image,           
-        mode="optical",        
-        area_limit=5,          
-        num_threads=2,          
+        image=image,         
+        mode="optical",      
+        area_limit=5,        
+        num_threads=2,        
     )
     findmysource.set_background()
     findmysource.phsf()
 
 if __name__ == "__main__":
     main()
-
 ```
 
 ## Bugs & Issues
@@ -142,5 +147,6 @@ or email me at [rhys.shaw@bristol.ac.uk](mailto:rhys.shaw@bristol.ac.uk).
 
 ## Acknowledgements
 
-If you use DRUID for your research, please cite: 
+If you use DRUID for your research, please cite:
+
 > [Shaw et al. 2025](https://doi.org/10.1093/rasti/rzaf006)
