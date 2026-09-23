@@ -1,39 +1,40 @@
-from DRUID.src.background import calculate_background
+"""
+Unit tests for background and RMS map estimation.
+"""
+
 import pytest
 import numpy as np
-# test the use of the calculate_background function
+from astropy.io import fits
+from photutils.background import MedianBackground
+from DRUID.src.background import make_source_mask, calculate_background_maps
 
-# prehaps use a sample more realistic array with cahracteristics of Radio and Optical data.
-test_array = np.array([[1,2,3,4,5],
-                        [6,7,8,9,10],
-                        [11,12,13,14,15],
-                        [16,17,18,19,20],
-                        [21,22,23,24,25]])
-def test_calculate_background_not_valid():
-    # test that a parameter not valid will fail
-    with pytest.raises(ValueError):
-        calculate_background(np.ones((10,10)), mode='not_valid')
 
-def test_mad_std_value():
-    # test that the mad_std value is correct
-    # assert has to be approximately equal to the value because of float
-    
-    assert calculate_background(test_array, mode='mad_std')[0]== pytest.approx(8.8956, 0.001) 
-    
-def test_rms_std_value():
-    # test that the rms_std value is correct
-    # assert has to be approximately equal to the value because of float
-    assert calculate_background(test_array, mode='rms')[0]== pytest.approx(14.8660, 0.001)
-    
-def test_mean_value():
-    # test that the mean value is correct
-    # assert has to be approximately equal to the value because of float
-    assert calculate_background(test_array, mode='mad_std')[1]== pytest.approx(13.0, 0.001)
-    
-def test_sigma_clipping_value():
-    # test that the sigma_clipping value is correct
-    # assert has to be approximately equal to the value because of float
-    assert calculate_background(test_array, mode='sigma_clip')[0]== pytest.approx(7.21110, 0.001)
-    
-def test_SEX_background_value():
-    assert calculate_background(test_array, mode='SEX')[0]== pytest.approx(7.21110, 0.001)
+@pytest.fixture
+def dummy_fits_file(tmp_path) -> str:
+    """Fixture to generate a dummy FITS file with a noise floor."""
+    rng = np.random.default_rng(42)  # Reproducible seed
+    data = rng.uniform(5, 15, size=(100, 100))
+    file_path = tmp_path / "dummy_image.fits"
+    fits.PrimaryHDU(data).writeto(file_path)
+    return str(file_path)
+
+
+def test_calculate_background_maps_defaults(dummy_fits_file):
+    """Test background map generation with default estimators."""
+    bg_map, rms_map = calculate_background_maps(dummy_fits_file)
+
+    assert bg_map.shape == (100, 100)
+    assert rms_map.shape == (100, 100)
+    assert bg_map.dtype.type == np.float64
+    assert np.all(bg_map > 0)
+    assert np.all(rms_map > 0)
+
+
+def test_calculate_background_maps_array_input():
+    """Test background map generation passing a NumPy array directly."""
+    rng = np.random.default_rng(42)
+    data = rng.normal(10, 1, size=(50, 50))
+    bg_map, rms_map = calculate_background_maps(data, bg_estimator=MedianBackground())
+
+    assert bg_map.shape == (50, 50)
+    np.testing.assert_allclose(np.median(bg_map), 10.0, rtol=0.1)
